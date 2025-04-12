@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from realtime_sentiment.producer.ytb_handler import stream_youtube_video_and_extract
-from realtime_sentiment.producer.tiktok_handler import download_and_stream_tiktok_video
+from ..producer.ytb_handler import stream_youtube_video_and_extract
+from ..producer.tiktok_handler import download_and_stream_tiktok_video
 
 router = APIRouter()
 
