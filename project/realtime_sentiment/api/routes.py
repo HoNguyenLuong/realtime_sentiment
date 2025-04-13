@@ -1,21 +1,21 @@
 from fastapi import APIRouter, HTTPException
-from ..producer.ytb_handler import stream_youtube_video_and_extract
-from ..producer.tiktok_handler import download_and_stream_tiktok_video
+from realtime_sentiment.producer.controller import process_url, process_multiple_urls
 
 router = APIRouter()
 
-@router.post("/youtube")
-def process_youtube(url: str):
+@router.post("/process")
+def process_any_url(url: str):
     try:
-        stream_youtube_video_and_extract(url)
-        return {"status": "YouTube processing started"}
+        process_url(url)
+        return {"status": "Processing started"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/tiktok")
-def process_tiktok(url: str):
+
+@router.post("/process_batch")
+def process_batch_urls(urls: list[str]):
     try:
-        download_and_stream_tiktok_video(url)
-        return {"status": "TikTok processing started"}
+        process_multiple_urls(urls)
+        return {"status": f"Started processing {len(urls)} URLs"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,14 +1,17 @@
-import threading
-from ytb_handler import stream_youtube_video_and_extract, extract_audio_stream
-from tiktok_handler import download_and_stream_tiktok_video
+from realtime_sentiment.producer.ytb_handler import process_ytb_urls, process_ytb_url
+from realtime_sentiment.producer.tiktok_handler import process_tiktok_urls, process_tiktok_url
 
 def process_url(url):
     if "tiktok.com" in url:
-        download_and_stream_tiktok_video(url)
-    elif "youtube.com" in url:
-        t1 = threading.Thread(target=stream_youtube_video_and_extract, args=(url,))
-        t2 = threading.Thread(target=extract_audio_stream, args=(url,))
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
+        process_tiktok_url(url)
+    elif "youtube.com" in url or "youtu.be" in url:
+        process_ytb_url(url)
+    else:
+        print(f"⚠️ Unsupported URL: {url}")
+
+def process_multiple_urls(youtube_playlist=None, tiktok_urls=None):
+    if youtube_playlist:
+        process_ytb_urls(youtube_playlist)
+
+    if tiktok_urls:
+        process_tiktok_urls(tiktok_urls)
