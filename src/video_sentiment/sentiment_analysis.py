@@ -1,6 +1,4 @@
-import base64
 import numpy as np
-import cv2
 from typing import Tuple, List
 from deepface import DeepFace
 from face_detection import detect_faces
@@ -101,6 +99,7 @@ def analyze_emotions(b64_img: str) -> Tuple[int, List[str]]:
 
         # Bước 2: Phát hiện khuôn mặt, trả về số khuôn mặt và danh sách ảnh
         num_faces, face_images = detect_faces(image)
+        face_images = face_images[:3]
         if num_faces <= 0:
             print("[analyze_emotions] Step 2: No faces detected")
             return 0, []
