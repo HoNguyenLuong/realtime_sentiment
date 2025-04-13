@@ -1,12 +1,11 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, udf
-from pyspark.sql.types import StructType, StringType, TimestampType
-import base64
-import numpy as np
-import cv2
+from pyspark.sql.types import StructType, StringType, TimestampType, IntegerType, StructField, ArrayType
 
-from face_detection import detect_faces
-from ..utils.image_utils import process_image
+from sentiment_analysis import analyze_emotions
+
+
+
 
 # Khởi tạo Spark session
 spark = SparkSession.builder \
@@ -35,31 +34,35 @@ json_df = df.selectExpr("CAST(value AS STRING) as json_str") \
     .select(from_json(col("json_str"), schema).alias("data")) \
     .select("data.*")
 
-# # Decode base64 -> byte[] -> frame shape
-# def extract_shape(b64_img: str) -> str:
-#     try:
-#         img_data = base64.b64decode(b64_img)
-#         np_arr = np.frombuffer(img_data, np.uint8)
-#         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-#         if img is not None:
-#             return f"{img.shape}"
-#         return "Invalid frame"
-#     except Exception as e:
-#         return f"Error: {e}"
-#
-# # Đăng ký UDF
-# extract_shape_udf = udf(extract_shape, StringType())
-#
-# # Áp dụng UDF để hiển thị frame shape
-# processed_df = json_df.withColumn("frame_shape", extract_shape_udf(col("image"))) \
-#                       .withColumn("source", col("metadata.source")) \
-#                       .withColumn("timestamp", col("metadata.timestamp"))
+# Schema cho UDF
+emotion_schema = StructType([
+    StructField("num_faces", IntegerType(), False),
+    StructField("emotions", ArrayType(StringType()), False)
+])
+#Đăng ký UDF
+emotion_udf = udf(analyze_emotions, emotion_schema)
 
-# # In kết quả ra console (demo)
-# query = processed_df.select("source", "timestamp", "frame_shape") \
-#     .writeStream \
-#     .format("console") \
-#     .outputMode("append") \
-#     .start()
-#
-# query.awaitTermination()
+# Áp dụng UDF
+result_df = json_df.withColumn("result", emotion_udf(col("image")))
+
+# Tách struct thành các cột riêng
+result_df = result_df.select(
+    col("image"),
+    col("metadata.source").alias("source"),
+    col("metadata.timestamp").alias("timestamp"),
+    col("result.num_faces").alias("num_faces"),
+    col("result.emotions").alias("emotions")
+)
+
+# Ghi kết quả ra console (hoặc thay bằng Kafka/database)
+query = result_df.writeStream \
+    .outputMode("append") \
+    .format("console") \
+    .option("truncate", False) \
+    .start()
+
+# Chờ stream kết thúc
+query.awaitTermination()
+
+# Dừng SparkSession
+spark.stop()

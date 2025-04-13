@@ -20,6 +20,10 @@ def detect_faces(image):
 
     # Phát hiện khuôn mặt trong ảnh xám
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+    face_images = []
 
-    # Trả về danh sách các khuôn mặt phát hiện được (mỗi khuôn mặt là một tuple (x, y, w, h))
-    return faces
+    for (x, y, w, h) in faces:
+        face_img = image[y:y + h, x:x + w]
+        face_images.append(face_img)
+
+    return len(faces), face_images
