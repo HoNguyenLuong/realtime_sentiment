@@ -9,50 +9,22 @@ import hashlib
 import os
 from kafka import KafkaProducer
 from dotenv import load_dotenv
+from realtime_sentiment.producer.kafka_sender import send_frame, send_audio
+from realtime_sentiment.producer.config import CONFIG
+
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-CONFIG = {
-    'kafka': {
-        'bootstrap_servers': os.getenv('KAFKA_SERVERS', 'localhost:9092'),
-    }
-}
+PROCESSED_FILE = "processed_ytb_ids.txt"
+processed_ids = set()
 
-producer = KafkaProducer(
-    bootstrap_servers=CONFIG['kafka']['bootstrap_servers'],
-    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-    api_version=(4, 0)
-)
+if os.path.exists(PROCESSED_FILE):
+    with open(PROCESSED_FILE, 'r') as f:
+        processed_ids = set(line.strip() for line in f)
 
 def get_video_id(url):
     return hashlib.md5(url.encode()).hexdigest()
-
-def send_frame(video_id, frame_id, frame_bytes, source='youtube'):
-    try:
-        if isinstance(frame_bytes, np.ndarray):
-            frame_bytes = frame_bytes.tobytes()
-        producer.send('video_frames', value={
-            'video_id': video_id,
-            'frame_id': frame_id,
-            'source': source,
-            'data': base64.b64encode(frame_bytes).decode('utf-8')
-        })
-    except Exception as e:
-        logger.error(f"Error sending frame {frame_id}: {e}")
-
-def send_audio(video_id, chunk_id, chunk, source='youtube'):
-    try:
-        if isinstance(chunk, np.ndarray):
-            chunk = chunk.tobytes()
-        producer.send('audio_stream', value={
-            'video_id': video_id,
-            'chunk_id': chunk_id,
-            'source': source,
-            'data': base64.b64encode(chunk).decode('utf-8')
-        })
-    except Exception as e:
-        logger.error(f"Error sending audio chunk {chunk_id}: {e}")
 
 def stream_youtube_video_and_extract(url):
     video_id = get_video_id(url)
@@ -102,3 +74,45 @@ def extract_audio_stream(url):
         logger.info(f"Sent {chunk_id} audio chunks from YouTube {url}")
     except Exception as e:
         logger.error(f"Error extracting audio: {e}")
+        
+def collect_youtube_urls_from_playlist(list_or_channel_url):
+    try:
+        cmd = ['yt-dlp', '--flat-playlist', '--get-id', list_or_channel_url]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True, text=True)
+        video_ids = result.stdout.strip().splitlines()
+        urls = [f"https://www.youtube.com/watch?v={vid}" for vid in video_ids]
+        logger.info(f"Collected {len(urls)} YouTube videos from {list_or_channel_url}")
+        return urls
+    except Exception as e:
+        logger.error(f"Error collecting YouTube URLs: {e}")
+        return []
+
+def process_ytb_url(url):
+    video_id = get_video_id(url)
+
+    if video_id in processed_ids:
+        logger.info(f"Skipping already processed video: {video_id}")
+        return
+
+    if "youtube.com" in url or "youtu.be" in url:
+        # YouTube: Process audio + video in parallel with threading
+        try:
+            t1 = threading.Thread(target=stream_youtube_video_and_extract, args=(url,))
+            t2 = threading.Thread(target=extract_audio_stream, args=(url,))
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
+        except Exception as e:
+            logger.error(f"Error processing YouTube video: {e}")
+    else:
+        logger.warning(f"Unsupported URL: {url}")
+
+    with open(PROCESSED_FILE, 'a') as f:
+        f.write(video_id + "\n")
+    processed_ids.add(video_id)
+
+def process_ytb_urls(list_or_channel_url):
+    url_list = collect_youtube_urls_from_playlist(list_or_channel_url)
+    for url in url_list:
+        process_ytb_url(url)

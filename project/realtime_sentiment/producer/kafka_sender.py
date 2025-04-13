@@ -2,7 +2,7 @@ import base64
 import json
 import numpy as np
 from kafka import KafkaProducer
-from config import CONFIG
+from realtime_sentiment.producer.config import CONFIG
 
 producer = KafkaProducer(
     bootstrap_servers=CONFIG['kafka']['bootstrap_servers'],
