@@ -22,7 +22,7 @@ def main():
         classname="CustomEncoderWav2vec2Classifier"
     )
 
-    # Phân tích sentiment
+    # Phân tích sentiment....
     processed_text = analyze_sentiment(text, sentiment_model, sentiment_tokenizer, labels)
     print("\nSentiment Scores:")
     for label, score in processed_text:
