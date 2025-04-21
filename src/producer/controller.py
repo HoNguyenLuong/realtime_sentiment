@@ -1,6 +1,6 @@
 import threading
-from ytb_handler import stream_youtube_video_and_extract, extract_audio_stream
-from tiktok_handler import download_and_stream_tiktok_video
+from .ytb_handler import stream_youtube_video_and_extract, extract_audio_stream
+from .tiktok_handler import download_and_stream_tiktok_video
 
 def process_url(url):
     if "tiktok.com" in url:

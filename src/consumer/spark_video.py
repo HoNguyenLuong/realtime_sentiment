@@ -2,7 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, udf
 from pyspark.sql.types import StructType, StringType, TimestampType, IntegerType, StructField, ArrayType
 
-from ..video_sentiment.sentiment_analysis import analyze_emotions
+from realtime_sentiment.src.video_sentiment.sentiment_analysis import analyze_emotions
 
 def run ():
     try:

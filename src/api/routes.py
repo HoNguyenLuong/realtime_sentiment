@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from ..producer.controller import process_url
+from realtime_sentiment.src.producer.controller import process_url
 router = APIRouter()
 
 @router.post("/social_media")

@@ -1,10 +1,11 @@
 import numpy as np
 from typing import Tuple, List
 from deepface import DeepFace
-from face_detection import detect_faces
+from .face_detection import detect_faces
+from .face_alignment import align_face
+from .landmark_detection import detect_landmarks
 from ..utils.image_utils import process_image
-from face_alignment import align_face
-from landmark_detection import detect_landmarks
+
 
 
 def process_emotions_deepface(face_images: List[np.ndarray]) -> List[str]:

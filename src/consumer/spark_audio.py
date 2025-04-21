@@ -1,4 +1,4 @@
-from common import get_kafka_consumer, decode_base64, logger, AUDIO_TOPIC
+from .common import get_kafka_consumer, decode_base64, logger, AUDIO_TOPIC
 
 def process_audio_chunk(audio_bytes: bytes, metadata: dict):
     # TODO: gọi model STT, sentiment analysis từ giọng nói ở đây
