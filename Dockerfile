@@ -23,11 +23,17 @@ COPY requirement.txt .
 # Cài đặt các phụ thuộc Python
 RUN pip install --no-cache-dir -r requirement.txt
 
+
+
 # Copy toàn bộ project vào container
 COPY . .
+
+COPY wait-for-kafka.sh /app/wait-for-kafka.sh
+RUN chmod +x /app/wait-for-kafka.sh
 
 # Mở port
 EXPOSE 8000
 
 # Chạy ứng dụng
-CMD ["python", "src/main.py"]
+# Chạy script chờ Kafka, rồi mới chạy uvicorn
+CMD ["/app/wait-for-kafka.sh"]

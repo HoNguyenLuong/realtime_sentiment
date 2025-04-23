@@ -1,6 +1,7 @@
 opencv-python
 opencv-python-headless
 pydub
+minio
 kafka-python
 transformers
 torch
@@ -20,5 +21,5 @@ torchaudio
 pyspark
 mtcnn
 uvicorn
-ytb-dlp
+yt-dlp
 ffmpeg
