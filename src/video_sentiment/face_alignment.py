@@ -2,15 +2,14 @@ import cv2
 import numpy as np
 from typing import Optional, Tuple, List
 
-
 def align_face(face_img: np.ndarray, landmarks: List[Tuple[int, int]], output_size: Tuple[int, int] = (112, 112)) -> \
-Optional[np.ndarray]:
+        Optional[np.ndarray]:
     """
     Căn chỉnh khuôn mặt dựa trên landmarks để mắt và mũi ở vị trí cố định.
 
     Args:
         face_img: Ảnh khuôn mặt (NumPy array, định dạng BGR từ OpenCV).
-        landmarks: Danh sách tọa độ (x, y) của 68 landmarks từ detect_landmarks.
+        landmarks: Danh sách tọa độ (x, y) của 3 điểm: mắt trái, mắt phải, mũi.
         output_size: Kích thước ảnh đầu ra (width, height).
 
     Returns:
@@ -20,12 +19,16 @@ Optional[np.ndarray]:
     try:
         if not isinstance(face_img, np.ndarray):
             raise ValueError("Đầu vào phải là mảng NumPy")
-        if not landmarks or len(landmarks) !=    68:
-            raise ValueError("Landmarks không hợp lệ")
+        if not landmarks or len(landmarks) != 3:
+            raise ValueError("Landmarks không hợp lệ, cần chính xác 3 điểm (mắt trái, mắt phải, mũi)")
 
-        # Chọn hai điểm mắt (landmark 36 và 45 cho mắt trái và phải)
-        left_eye = np.mean([landmarks[36], landmarks[39]], axis=0).astype(np.float32)
-        right_eye = np.mean([landmarks[42], landmarks[45]], axis=0).astype(np.float32)
+        # landmarks[0]: mắt trái, landmarks[1]: mắt phải, landmarks[2]: mũi
+        left_eye = landmarks[0]
+        right_eye = landmarks[1]
+
+        # Chuyển về định dạng numpy float32 để tính toán
+        left_eye = np.array(left_eye, dtype=np.float32)
+        right_eye = np.array(right_eye, dtype=np.float32)
 
         # Tính góc xoay để căn chỉnh mắt theo đường ngang
         dY = right_eye[1] - left_eye[1]

@@ -79,38 +79,32 @@ def process_emotions_integrated(face_images: List[np.ndarray]) -> List[str]:
             emotions.append("error")
     return emotions
 
-
-def analyze_emotions(b64_img: str) -> Tuple[int, List[str]]:
+def analyze_emotions(image: np.ndarray) -> Tuple[int, List[str]]:
     """
     Phân tích cảm xúc từ ảnh gốc, gộp các bước chung và gọi hàm bước 3 riêng.
 
     Args:
-        b64_img: Chuỗi base64 của ảnh gốc.
-        method: Phương thức bước 3 ("deepface" hoặc "integrated").
+        image: Mảng NumPy của ảnh gốc (dạng BGR từ OpenCV).
 
     Returns:
         Tuple[int, List[str]]: (số lượng khuôn mặt, danh sách nhãn cảm xúc).
     """
     try:
-        # Bước 1: Giải mã ảnh gốc thành mảng NumPy
-        is_valid, message, image = process_image(b64_img)
-        if not is_valid or image is None:
-            print(f"[analyze_emotions] Step 1 failed: {message}")
+        # Kiểm tra đầu vào là mảng NumPy hợp lệ
+        if not isinstance(image, np.ndarray) or image.size == 0:
+            print("[analyze_emotions] Invalid image input")
             return -1, ["error"]
 
         # Bước 2: Phát hiện khuôn mặt, trả về số khuôn mặt và danh sách ảnh
         num_faces, face_images = detect_faces(image)
-        face_images = face_images[:3]
+        face_images = face_images[:3]  # Giới hạn xử lý tối đa 3 khuôn mặt
         if num_faces <= 0:
             print("[analyze_emotions] Step 2: No faces detected")
             return 0, []
 
         # Bước 3: Phân tích cảm xúc, chọn phương thức
-
         # emotions = process_emotions_deepface(face_images)
-
         emotions = process_emotions_integrated(face_images)
-
 
         return num_faces, emotions
     except Exception as e:
