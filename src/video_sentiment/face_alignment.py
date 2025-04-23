@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from typing import Optional, Tuple, List
 
+
 def align_face(face_img: np.ndarray, landmarks: List[Tuple[int, int]], output_size: Tuple[int, int] = (112, 112)) -> \
         Optional[np.ndarray]:
     """
