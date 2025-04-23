@@ -20,5 +20,6 @@ torchaudio
 pyspark
 mtcnn
 uvicorn
-ytb-dlp
-ffmpeg
+yt-dlp
+ffmpeg-python
+imageio-ffmpeg

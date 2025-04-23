@@ -1,33 +1,19 @@
 FROM python:3.9-slim
 
-# Cài đặt các phụ thuộc hệ thống
 RUN apt-get update && \
     apt-get install -y ffmpeg libgl1-mesa-glx git curl netcat-openbsd && \
     apt-get clean
 
-# Cài đặt yt-dlp
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
     chmod a+rx /usr/local/bin/yt-dlp
 
-# Thiết lập thư mục làm việc
 WORKDIR /app
-
-
-
-# Thiết lập PYTHONPATH để hỗ trợ imports
-ENV PYTHONPATH="${PYTHONPATH}:/app:/app/src"
-
-# Copy requirements vào container
-COPY requirement.txt .
-
-# Cài đặt các phụ thuộc Python
-RUN pip install --no-cache-dir -r requirement.txt
-
-# Copy toàn bộ project vào container
 COPY . .
-
-# Mở port
+    
+    # QUAN TRỌNG: Đặt PYTHONPATH bao gồm cả thư mục gốc
+ENV PYTHONPATH="${PYTHONPATH}:/app:/app/project"
+    
+RUN pip install --no-cache-dir -r requirements.txt
+    
 EXPOSE 8000
-
-# Chạy ứng dụng
-CMD ["python", "src/main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]    

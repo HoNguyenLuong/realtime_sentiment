@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG = {
     'kafka': {
-        'bootstrap_servers': os.getenv('KAFKA_SERVERS', 'localhost:9092'),
+        'bootstrap_servers': os.getenv('KAFKA_SERVERS', 'localhost:29092'),  # Note the port is 29092
     }
 }
 
@@ -31,7 +31,7 @@ def send_frame(video_id, frame_id, frame_bytes, source='youtube'):
     try:
         if isinstance(frame_bytes, np.ndarray):
             frame_bytes = frame_bytes.tobytes()
-        producer.send('video_frames', value={
+        producer.send('video_frame', value={
             'video_id': video_id,
             'frame_id': frame_id,
             'source': source,

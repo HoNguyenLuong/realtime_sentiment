@@ -1,7 +1,6 @@
-version: '3'
+version: '3.8'
 
 services:
-  # Zookeeper cho Kafka
   zookeeper:
     image: wurstmeister/zookeeper
     ports:
@@ -9,63 +8,49 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
 
-  # Kafka broker
   kafka:
     image: wurstmeister/kafka
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_CREATE_TOPICS: "video_frames:1:1,processed_sentiment:1:1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     depends_on:
       - zookeeper
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
-  # Spark master
-  spark-master:
-    image: bitnami/spark:3.3.0
-    environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+  kafka-ui:
+    image: provectuslabs/kafka-ui
     ports:
       - "8080:8080"
-      - "7077:7077"
-
-  # Spark worker
-  spark-worker:
-    image: bitnami/spark:3.3.0
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    ports:
-      - "8081:8081"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     depends_on:
-      - spark-master
+      - kafka
 
-  # Container cho ứng dụng chính của bạn
-  realtime-sentiment:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
+    image: yourusername/realtime-sentiment-app:latest
     volumes:
       - ./:/app
+    working_dir: /app
+    ports:
+      - "8000:8000"       # hoặc port bạn dùng cho FastAPI/Django...
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - SPARK_MASTER=spark://spark-master:7077
+      - OTHER_ENV=...
     depends_on:
       - kafka
-      - spark-master
-      - spark-worker
-    ports:
-      - "8000:8000"
-    command: python src/main.py
+      - zookeeper
+    command: >
+      sh -c "python -m src.main"
