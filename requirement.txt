@@ -1,6 +1,7 @@
 opencv-python
 opencv-python-headless
 pydub
+minio
 kafka-python
 transformers
 torch
@@ -8,7 +9,7 @@ whisper
 fer
 deepface
 TikTokApi
-numpy
+numpy<2.0.0
 imageio
 ffmpeg-python
 python-dotenv
@@ -17,8 +18,9 @@ pytube
 moviepy
 fastapi
 torchaudio
-pyspark
+pyspark==3.3.0
 mtcnn
 uvicorn
-ytb-dlp
+yt-dlp
 ffmpeg
+tensorflow==2.10.1

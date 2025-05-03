@@ -1,62 +1,70 @@
-import base64
-import cv2
+import io
+from PIL import Image
+from src.consumer.common import get_kafka_producer, mark_as_processed, logger
+from src.video_sentiment.sentiment_analysis import analyze_emotions
+from src.producer.config import minio_client
 import numpy as np
-from typing import Tuple, Optional
 
-
-# ===== CONFIG =====
-MIN_HEIGHT = 100
-MIN_WIDTH = 100
-TARGET_SIZE = (224, 224)  # Resize nếu cần
-
-
-def decode_base64_to_image(b64_img: str) -> Optional[np.ndarray]:
+def get_frame_from_minio(bucket_name, object_name):
     """
-    Giải mã chuỗi base64 thành ảnh OpenCV.
-    Trả về None nếu không hợp lệ.
+    Lấy frame JPG từ MinIO và chuyển đổi thành numpy array
+
+    Args:
+        bucket_name (str): Tên bucket
+        object_name (str): Tên object
+
+    Returns:
+        numpy.ndarray: Frame dạng numpy array hoặc None nếu có lỗi
     """
     try:
-        img_data = base64.b64decode(b64_img)
-        np_arr = np.frombuffer(img_data, np.uint8)
-        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        return img if img is not None else None
+        # Lấy đối tượng từ MinIO
+        response = minio_client.get_object(bucket_name, object_name)
+
+        # Đọc dữ liệu và chuyển thành ảnh
+        image_data = response.read()
+        image = Image.open(io.BytesIO(image_data))
+
+        # Chuyển thành numpy array
+        frame = np.array(image)
+
+        logger.info(f"Đã lấy frame JPG từ MinIO: {object_name}")
+        return frame
+
     except Exception as e:
-        print(f"[decode_base64_to_image] Decode failed: {e}")
+        logger.error(f"Lỗi khi lấy frame từ MinIO: {str(e)}")
         return None
+    finally:
+        if 'response' in locals():
+            response.close()
+            response.release_conn()
 
+def process_frame(metadata_row):
+    try:
+        # Các xử lý hiện tại...
+        bucket_name = metadata_row["bucket_name"]
+        object_name = metadata_row["object_name"]
 
-def is_valid_resolution(img: np.ndarray, min_height: int = MIN_HEIGHT, min_width: int = MIN_WIDTH) -> bool:
-    """
-    Kiểm tra xem ảnh có đạt độ phân giải tối thiểu không.
-    """
-    h, w = img.shape[:2]
-    return h >= min_height and w >= min_width
+        # Lấy frame từ MinIO
+        frame = get_frame_from_minio(bucket_name, object_name)
 
+        if frame is not None:
+            # Phân tích cảm xúc
+            num_faces, emotions = analyze_emotions(frame)
 
-def resize_if_needed(img: np.ndarray, target_size: Tuple[int, int] = TARGET_SIZE) -> np.ndarray:
-    """
-    Resize ảnh về kích thước chuẩn nếu khác với target.
-    """
-    h, w = img.shape[:2]
-    if (h, w) != target_size:
-        return cv2.resize(img, target_size)
-    return img
+            # Đánh dấu đã xử lý trong Kafka
+            producer = get_kafka_producer()
+            mark_as_processed(producer, metadata_row)
 
+            # Sau khi xử lý xong và kết quả đã gửi đi, xóa object từ MinIO
+            try:
+                minio_client.remove_object(bucket_name, object_name)
+                logger.info(f"Đã xóa frame đã xử lý: {object_name}")
+            except Exception as e:
+                logger.error(f"Lỗi khi xóa frame từ MinIO: {str(e)}")
 
-def process_image(b64_img: str) -> Tuple[bool, str, Optional[np.ndarray]]:
-    """
-    Hàm tổng quát xử lý ảnh:
-    - Sanity check
-    - Check độ phân giải
-    - Resize nếu cần
-    Trả về: (is_valid, message, image)
-    """
-    img = decode_base64_to_image(b64_img)
-    if img is None:
-        return False, "Image decode failed", None
-
-    if not is_valid_resolution(img):
-        return False, f"Image too small: {img.shape}", None
-
-    img_resized = resize_if_needed(img)
-    return True, f"Image valid: {img_resized.shape}", img_resized
+            return {"num_faces": num_faces, "emotions": emotions}
+        else:
+            return {"num_faces": 0, "emotions": []}
+    except Exception as e:
+        logger.error(f"Lỗi khi xử lý frame: {str(e)}")
+        return {"num_faces": 0, "emotions": []}

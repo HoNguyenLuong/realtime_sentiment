@@ -1,30 +1,45 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, udf
-from pyspark.sql.types import StructType, StringType, TimestampType, IntegerType, StructField, ArrayType
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import StructType, StringType, IntegerType, StructField, ArrayType
+from src.utils.image_utils import process_frame
+from .common import logger, VIDEO_TOPIC
+from src.producer.config import CONFIG
+from datetime import datetime
+import numpy as np
+from src.producer.kafka_sender import producer
 
-from realtime_sentiment.src.video_sentiment.sentiment_analysis import analyze_emotions
-
-def run ():
+def run():
     try:
-        # Khởi tạo Spark session
+        # Định nghĩa tên topic cho kết quả xử lý emotion
+        emotion_results_topic = "emotion_results"
+
+        # Khởi tạo Spark session kết nối với Spark master bên ngoài
         spark = SparkSession.builder \
             .appName("VideoFrameProcessor") \
+            .master("spark://spark-master:7077") \
+            .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0") \
+            .config("spark.sql.streaming.checkpointLocation", "/tmp/checkpoint") \
+            .config("spark.driver.extraJavaOptions", "-Dkafka.bootstrap.servers=kafka:9092") \
+            .config("spark.executor.extraClassPath", "/opt/spark/jars/*") \
+            .config("spark.driver.extraClassPath", "/opt/spark/jars/*") \
             .getOrCreate()
 
         spark.sparkContext.setLogLevel("WARN")
 
-        # Schema dữ liệu Kafka gửi tới
+        # Schema dữ liệu Kafka gửi tới - Đây là metadata từ MinIO
         schema = StructType() \
-            .add("image", StringType()) \
-            .add("metadata", StructType()
-                 .add("source", StringType())
-                 .add("timestamp", StringType()))
+            .add("video_id", StringType()) \
+            .add("frame_id", StringType()) \
+            .add("type", StringType()) \
+            .add("bucket_name", StringType()) \
+            .add("object_name", StringType()) \
+            .add("timestamp", StringType())
 
-        # Đọc từ Kafka topic
+        # Đọc từ Kafka topic video_frames
         df = spark.readStream \
             .format("kafka") \
-            .option("kafka.bootstrap.servers", "localhost:9092") \
-            .option("subscribe", "video_frames") \
+            .option("kafka.bootstrap.servers", CONFIG['kafka']['bootstrap_servers']) \
+            .option("subscribe", VIDEO_TOPIC) \
             .option("startingOffsets", "latest") \
             .load()
 
@@ -33,68 +48,70 @@ def run ():
             .select(from_json(col("json_str"), schema).alias("data")) \
             .select("data.*")
 
-        # Schema cho UDF emotion
-        emotion_schema = StructType([
-            StructField("num_faces", IntegerType(), False),
-            StructField("emotions", ArrayType(StringType()), False)
-        ])
+        # Sử dụng foreachBatch để xử lý từng batch
+        def process_batch(batch_df, batch_id):
+            if not batch_df.isEmpty():
+                # Convert DataFrame to pandas để xử lý từng hàng
+                pandas_df = batch_df.toPandas()
 
-        # Đăng ký UDF
-        emotion_udf = udf(analyze_emotions, emotion_schema)
+                # Xử lý từng hàng
+                results = []
+                for _, row in pandas_df.iterrows():
+                    if hasattr(row, 'asDict'):
+                        metadata = row.asDict()
+                    else:
+                        metadata = row.to_dict()
+                    result = process_frame(metadata)
+                    results.append({
+                        "frame_id": metadata.get("frame_id"),
+                        "video_id": metadata.get("video_id"),
+                        "timestamp": metadata.get("timestamp"),
+                        "bucket_name": metadata.get("bucket_name"),
+                        "object_name": metadata.get("object_name"),
+                        "num_faces": result.get("num_faces"),
+                        "emotions": result.get("emotions"),
+                        "processed_at": datetime.now().isoformat()
+                    })
 
-        # Áp dụng UDF
-        result_df = json_df.withColumn("result", emotion_udf(col("image")))
+                # Tạo DataFrame kết quả và ghi ra Kafka
+                if results:
+                    result_schema = StructType([
+                        StructField("frame_id", StringType(), True),
+                        StructField("video_id", StringType(), True),
+                        StructField("timestamp", StringType(), True),
+                        StructField("bucket_name", StringType(), True),
+                        StructField("object_name", StringType(), True),
+                        StructField("num_faces", IntegerType(), True),
+                        StructField("emotions", ArrayType(StringType()), True),
+                        StructField("processed_at", StringType(), True)
+                    ])
 
-        # Tách struct thành các cột riêng
-        result_df = result_df.select(
-            col("image"),
-            col("metadata.source").alias("source"),
-            col("metadata.timestamp").alias("timestamp"),
-            col("result.num_faces").alias("num_faces"),
-            col("result.emotions").alias("emotions")
-        )
+                    result_df = spark.createDataFrame(results, schema=result_schema)
 
-        # Ghi kết quả ra console (hoặc thay bằng Kafka/database)
-        # query = result_df.writeStream \
-        #     .outputMode("append") \
-        #     .format("console") \
-        #     .option("truncate", False) \
-        #     .start()
+                    # Ghi kết quả ra Kafka
+                    # Chúng ta sẽ sử dụng cách đơn giản hơn để gửi dữ liệu đến Kafka
+                    # Kafka sẽ tự động tạo topic nếu nó chưa tồn tại (nếu server được cấu hình cho phép
+                    # Khởi tạo Kafka producer
+                    # Gửi từng kết quả đến Kafka
+                    for result in results:
+                        producer.send(emotion_results_topic, value=result)
 
-        # Ghi kết quả ra Kafka
-        query = result_df.selectExpr("to_json(struct(*)) AS value") \
-            .writeStream \
-            .format("kafka") \
-            .option("kafka.bootstrap.servers", "localhost:9092") \
-            .option("topic", "emotion_results") \
-            .outputMode("append") \
+                    # Đảm bảo dữ liệu đã được gửi hết
+                    producer.flush()
+
+                    logger.info(
+                        f"Successfully processed batch {batch_id} and sent {len(results)} results to topic {emotion_results_topic}")
+
+        # Sử dụng foreachBatch để xử lý từng batch
+        query = json_df.writeStream \
+            .foreachBatch(process_batch) \
             .start()
-
-        # # Ghi kết quả ra database
-        # def write_to_db(batch_df, batch_id):
-        #     batch_df.write \
-        #         .format("jdbc") \
-        #         .option("url", "jdbc:postgresql://localhost:5432/dbname") \
-        #         .option("dbtable", "emotion_results") \
-        #         .option("user", "user") \
-        #         .option("password", "password") \
-        #         .mode("append") \
-        #         .save()
-        #
-        # query = result_df.writeStream \
-        #     .outputMode("append") \
-        #     .foreachBatch(write_to_db) \
-        #     .start()
 
         # Chờ stream kết thúc
         query.awaitTermination()
 
-        # Dừng SparkSession
-        spark.stop()
     except Exception as e:
-        print(f"[video_consumer.run] Error: {e}")
+        logger.error(f"[video_consumer.run] Error: {e}")
     finally:
         if 'spark' in locals():
             spark.stop()
-
-
