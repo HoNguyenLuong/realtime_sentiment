@@ -2,7 +2,8 @@ FROM python:3.9-slim
 
 # Cài các phụ thuộc hệ thống: ffmpeg, git, curl, netcat + thêm Java + procps
 RUN apt-get update && \
-    apt-get install -y ffmpeg libgl1-mesa-glx git curl netcat-openbsd openjdk-17-jdk procps gcc g++ && \
+    apt-get install -y ffmpeg libgl1-mesa-glx git curl netcat-openbsd openjdk-17-jdk procps gcc g++ bash && \
+    ln -sf /bin/bash /bin/sh && \
     apt-get clean
 
 # Thiết lập JAVA_HOME

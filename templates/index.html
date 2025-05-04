@@ -3,119 +3,458 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Link Processor</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <!-- Thêm Chart.js để vẽ biểu đồ -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>YouTube Sentiment Analyzer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/3.9.1/chart.min.js"></script>
     <style>
-        #sentimentChart { max-width: 600px; margin: 20px auto; }
-        #loading { display: none; text-align: center; margin-top: 20px; }
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+        .app-container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .app-header {
+            background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .app-header h1 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 2.2rem;
+        }
+
+        .app-header p {
+            margin-top: 10px;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .app-body {
+            padding: 30px;
+        }
+
+        .url-input-container {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .url-input-container i {
+            position: absolute;
+            left: 15px;
+            top: 15px;
+            color: #aaa;
+            font-size: 20px;
+        }
+
+        #youtube_url {
+            padding-left: 45px;
+            height: 50px;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s;
+        }
+
+        #youtube_url:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.25rem rgba(67, 97, 238, 0.25);
+        }
+
+        .btn-process {
+            background: var(--primary-color);
+            border: none;
+            height: 50px;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-process:hover {
+            background: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(67, 97, 238, 0.3);
+        }
+
+        #loading {
+            display: none;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            margin: 0 auto 15px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #result {
+            display: none;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        #result h3 {
+            color: var(--dark-color);
+            text-align: center;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        #sentimentChart {
+            max-width: 100%;
+            height: 300px;
+            margin: 20px auto;
+        }
+
+        .sentiment-summary {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .sentiment-item {
+            flex: 1;
+            padding: 15px;
+            margin: 0 10px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+        }
+
+        .positive {
+            background-color: #4ade80;
+        }
+
+        .negative {
+            background-color: #f87171;
+        }
+
+        .neutral {
+            background-color: #fbbf24;
+        }
+
+        .alert {
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .video-preview {
+            margin-top: 30px;
+            display: none;
+            text-align: center;
+        }
+
+        .video-preview iframe {
+            max-width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .video-title {
+            margin-top: 15px;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .app-container {
+                margin: 20px;
+                border-radius: 15px;
+            }
+
+            .app-header {
+                padding: 20px;
+            }
+
+            .app-body {
+                padding: 20px;
+            }
+
+            .sentiment-summary {
+                flex-direction: column;
+            }
+
+            .sentiment-item {
+                margin: 5px 0;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <h1 class="text-center">YouTube Link Processor</h1>
-        <form id="youtubeForm" method="POST">
-            <div class="mb-3">
-                <label for="youtube_url" class="form-label">Enter YouTube URL:</label>
-                <input type="url" class="form-control" id="youtube_url" name="youtube_url" placeholder="https://www.youtube.com/watch?v=example" required>
+    <div class="app-container">
+        <div class="app-header">
+            <h1><i class="fab fa-youtube"></i> YouTube Sentiment Analyzer</h1>
+            <p>Analyze the sentiment of comments on any YouTube video</p>
+        </div>
+
+        <div class="app-body">
+            <form id="youtubeForm" method="POST">
+                <div class="url-input-container">
+                    <i class="fas fa-link"></i>
+                    <input type="url" class="form-control" id="youtube_url" name="youtube_url"
+                           placeholder="Paste YouTube URL here (e.g., https://www.youtube.com/watch?v=example)" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-process w-100">
+                    <i class="fas fa-chart-pie me-2"></i> Analyze Sentiment
+                </button>
+            </form>
+
+            <!-- Alert messages -->
+            <div class="mt-3">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %} me-2"></i>
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% endwith %}
             </div>
-            <button type="submit" class="btn btn-primary">Process</button>
-        </form>
 
-        <!-- Khu vực hiển thị thông báo -->
-        <div class="mt-3">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <!-- Loading indicator -->
+            <div id="loading">
+                <div class="loading-spinner"></div>
+                <p>Analyzing comments... This may take a few moments</p>
+            </div>
+
+            <!-- Video preview -->
+            <div class="video-preview" id="videoPreview">
+                <iframe id="videoIframe" width="560" height="315" frameborder="0" allowfullscreen></iframe>
+                <div class="video-title" id="videoTitle"></div>
+            </div>
+
+            <!-- Results section -->
+            <div id="result" class="mt-4">
+                <h3>Sentiment Analysis Results</h3>
+                <canvas id="sentimentChart"></canvas>
+
+                <div class="sentiment-summary">
+                    <div class="sentiment-item positive">
+                        <i class="fas fa-smile-beam mb-2" style="font-size: 24px;"></i>
+                        <div>Positive</div>
+                        <div id="positivePercentage" style="font-size: 20px;">0%</div>
                     </div>
-                {% endfor %}
-            {% endif %}
-            {% endwith %}
-        </div>
-
-        <!-- Khu vực hiển thị loading -->
-        <div id="loading">
-            <p>Processing... Please wait.</p>
-        </div>
-
-        <!-- Khu vực hiển thị kết quả -->
-        <div id="result" class="mt-5" style="display: none;">
-            <h3 class="text-center">Sentiment Analysis Results</h3>
-            <canvas id="sentimentChart"></canvas>
+                    <div class="sentiment-item negative">
+                        <i class="fas fa-angry mb-2" style="font-size: 24px;"></i>
+                        <div>Negative</div>
+                        <div id="negativePercentage" style="font-size: 20px;">0%</div>
+                    </div>
+                    <div class="sentiment-item neutral">
+                        <i class="fas fa-meh mb-2" style="font-size: 24px;"></i>
+                        <div>Neutral</div>
+                        <div id="neutralPercentage" style="font-size: 20px;">0%</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
         const form = document.getElementById('youtubeForm');
         const loadingDiv = document.getElementById('loading');
         const resultDiv = document.getElementById('result');
+        const videoPreview = document.getElementById('videoPreview');
+        const videoIframe = document.getElementById('videoIframe');
+        const videoTitle = document.getElementById('videoTitle');
+
         let sentimentChart;
 
+        // Function to extract YouTube video ID from URL
+        function getYoutubeId(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
         form.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Ngăn form tải lại trang
+            e.preventDefault();
             const youtubeUrl = document.getElementById('youtube_url').value;
 
-            // Hiển thị loading
+            // Extract video ID and setup preview
+            const videoId = getYoutubeId(youtubeUrl);
+            if (videoId) {
+                videoIframe.src = `https://www.youtube.com/embed/${videoId}`;
+                videoPreview.style.display = 'block';
+                // In a real app, you might want to fetch the video title using YouTube API
+                videoTitle.textContent = "Video Analysis";
+            }
+
+            // Show loading
             loadingDiv.style.display = 'block';
             resultDiv.style.display = 'none';
 
             try {
-                // Gửi yêu cầu đến server
+                // Send request to server
                 const response = await fetch('/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ 'youtube_url': youtubeUrl })
                 });
 
-                // Sau khi xử lý, gọi API để lấy kết quả
+                // Get results
                 const result = await fetch('/get_results');
                 const data = await result.json();
 
-                // Ẩn loading và hiển thị kết quả
+                // Hide loading and show results
                 loadingDiv.style.display = 'none';
                 resultDiv.style.display = 'block';
 
-                // Vẽ biểu đồ
+                // Draw chart
                 drawChart(data);
+
+                // Update percentages
+                updatePercentages(data);
             } catch (error) {
                 console.error('Error:', error);
                 loadingDiv.style.display = 'none';
-                alert('An error occurred while processing the URL.');
+
+                // Show error alert
+                const alertContainer = document.querySelector('.mt-3');
+                const alertElement = document.createElement('div');
+                alertElement.className = 'alert alert-danger alert-dismissible fade show';
+                alertElement.innerHTML = `
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    An error occurred while processing the URL.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                alertContainer.appendChild(alertElement);
             }
         });
 
-        // Hàm vẽ biểu đồ sử dụng Chart.js
+        // Function to draw chart using Chart.js
         function drawChart(data) {
             const ctx = document.getElementById('sentimentChart').getContext('2d');
-            if (sentimentChart) sentimentChart.destroy(); // Xóa biểu đồ cũ nếu có
+            if (sentimentChart) sentimentChart.destroy();
 
             sentimentChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: ['Positive', 'Negative', 'Neutral'],
                     datasets: [{
-                        label: 'Sentiment Distribution',
+                        label: 'Comment Sentiment Distribution',
                         data: [
                             data.positive || 0,
                             data.negative || 0,
                             data.neutral || 0
                         ],
-                        backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
-                        borderColor: ['#28a745', '#dc3545', '#ffc107'],
-                        borderWidth: 1
+                        backgroundColor: ['#4ade80', '#f87171', '#fbbf24'],
+                        borderColor: ['#4ade80', '#f87171', '#fbbf24'],
+                        borderWidth: 1,
+                        borderRadius: 8
                     }]
                 },
                 options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 14
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        const total = data.positive + data.negative + data.neutral;
+                                        const percentage = Math.round((context.parsed.y / total) * 100);
+                                        label += `${context.parsed.y} comments (${percentage}%)`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        y: { beginAtZero: true }
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Comments',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            },
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Sentiment Category',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        }
                     }
                 }
             });
+        }
+
+        // Function to update percentage displays
+        function updatePercentages(data) {
+            const total = data.positive + data.negative + data.neutral;
+            if (total > 0) {
+                document.getElementById('positivePercentage').textContent =
+                    Math.round((data.positive / total) * 100) + '%';
+                document.getElementById('negativePercentage').textContent =
+                    Math.round((data.negative / total) * 100) + '%';
+                document.getElementById('neutralPercentage').textContent =
+                    Math.round((data.neutral / total) * 100) + '%';
+            }
         }
     </script>
 </body>
