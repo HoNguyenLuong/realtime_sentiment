@@ -1,7 +1,5 @@
-import base64
 import cv2
 import numpy as np
-
 
 def detect_faces(image):
     # Đảm bảo đầu vào là mảng NumPy

@@ -3,15 +3,25 @@ from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import StructType, StringType, IntegerType, StructField, ArrayType
 from src.utils.image_utils import process_frame
 from .common import logger, VIDEO_TOPIC
-from src.producer.config import CONFIG
+from src.producer.config import CONFIG, minio_client
 from datetime import datetime
 import numpy as np
+import json
 from src.producer.kafka_sender import producer
+
 
 def run():
     try:
         # Định nghĩa tên topic cho kết quả xử lý emotion
         emotion_results_topic = "emotion_results"
+
+        # Cấu hình bucket MinIO để lưu kết quả emotion
+        emotion_results_bucket = "emotion-results"
+
+        # Đảm bảo bucket tồn tại
+        if not minio_client.bucket_exists(emotion_results_bucket):
+            minio_client.make_bucket(emotion_results_bucket)
+            logger.info(f"Created new bucket: {emotion_results_bucket}")
 
         # Khởi tạo Spark session kết nối với Spark master bên ngoài
         spark = SparkSession.builder \
@@ -62,7 +72,9 @@ def run():
                     else:
                         metadata = row.to_dict()
                     result = process_frame(metadata)
-                    results.append({
+
+                    # Tạo đối tượng kết quả
+                    result_obj = {
                         "frame_id": metadata.get("frame_id"),
                         "video_id": metadata.get("video_id"),
                         "timestamp": metadata.get("timestamp"),
@@ -71,7 +83,35 @@ def run():
                         "num_faces": result.get("num_faces"),
                         "emotions": result.get("emotions"),
                         "processed_at": datetime.now().isoformat()
-                    })
+                    }
+
+                    results.append(result_obj)
+
+                    # Lưu kết quả vào MinIO
+                    try:
+                        # Tạo tên đối tượng dựa trên video_id và frame_id
+                        object_name = f"{metadata.get('video_id')}/{metadata.get('frame_id')}_emotion.json"
+
+                        # Chuyển đổi kết quả thành JSON string
+                        result_json = json.dumps(result_obj)
+
+                        # Lưu vào MinIO
+                        # Chuyển đổi byte string thành BytesIO object
+                        from io import BytesIO
+                        result_bytes = result_json.encode('utf-8')
+                        result_stream = BytesIO(result_bytes)
+
+                        minio_client.put_object(
+                            bucket_name=emotion_results_bucket,
+                            object_name=object_name,
+                            data=result_stream,
+                            length=len(result_bytes),
+                            content_type="application/json"
+                        )
+
+                        logger.info(f"Saved emotion result to MinIO: {emotion_results_bucket}/{object_name}")
+                    except Exception as e:
+                        logger.error(f"Error saving to MinIO: {e}")
 
                 # Tạo DataFrame kết quả và ghi ra Kafka
                 if results:
@@ -88,11 +128,7 @@ def run():
 
                     result_df = spark.createDataFrame(results, schema=result_schema)
 
-                    # Ghi kết quả ra Kafka
-                    # Chúng ta sẽ sử dụng cách đơn giản hơn để gửi dữ liệu đến Kafka
-                    # Kafka sẽ tự động tạo topic nếu nó chưa tồn tại (nếu server được cấu hình cho phép
-                    # Khởi tạo Kafka producer
-                    # Gửi từng kết quả đến Kafka
+                    # Gửi kết quả đến Kafka
                     for result in results:
                         producer.send(emotion_results_topic, value=result)
 

@@ -260,35 +260,6 @@ def extract_livestream_audio(url, stream_id):
         logger.error(f"Error extracting livestream audio: {e}")
         logger.exception(e)
 
-# Hàm mới cần thêm vào
-def process_ytb_url(url, video_id):
-    """
-    Xử lý một video YouTube đơn lẻ
-    """
-    if video_id in processed_ids:
-        logger.info(f"Skipping already processed video: {video_id}")
-        return
-
-    try:
-        # Chạy song song việc trích xuất video và audio
-        t1 = threading.Thread(target=stream_youtube_video_and_extract, args=(url, video_id))
-        t2 = threading.Thread(target=extract_audio_stream, args=(url, video_id))
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
-
-        # Đánh dấu video đã được xử lý
-        with open(PROCESSED_FILE, 'a') as f:
-            f.write(video_id + "\n")
-        processed_ids.add(video_id)
-
-        logger.info(f"Successfully processed YouTube video: {video_id}")
-    except Exception as e:
-        logger.error(f"Error processing YouTube video {video_id}: {e}")
-        logger.exception(e)
-
-
 def collect_youtube_urls_from_playlist(list_or_channel_url):
     try:
         cmd = ['yt-dlp', '--flat-playlist', '--get-id', '--get-title', list_or_channel_url]
@@ -313,8 +284,64 @@ def collect_youtube_urls_from_playlist(list_or_channel_url):
         logger.error(f"Error collecting YouTube URLs: {e}")
         return []
 
+# Hàm check livestream
+def check_if_livestream(url):
+    """
+    Kiểm tra xem URL có phải là livestream hay không
+    """
+    try:
+        cmd = ['yt-dlp', '--print', '%(is_live)s', url]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True, text=True)
+        is_live = result.stdout.strip().lower()
+
+        # yt-dlp trả về 'True' nếu là livestream
+        return is_live == 'true'
+    except Exception as e:
+        logger.error(f"Error checking if URL is livestream: {e}")
+        return False
+
+def process_ytb_url(url, video_id):
+    """
+    Xử lý một video YouTube đơn lẻ, phân biệt giữa video thường và livestream cho phần audio
+    """
+    if video_id in processed_ids:
+        logger.info(f"Skipping already processed video: {video_id}")
+        return
+
+    try:
+        # Kiểm tra xem đây có phải là livestream không
+        is_livestream = check_if_livestream(url)
+
+        # Luôn trích xuất video, bất kể là livestream hay video thường
+        t1 = threading.Thread(target=stream_youtube_video_and_extract, args=(url, video_id))
+        t1.start()
+        # Chọn phương thức trích xuất audio phù hợp dựa trên loại nội dung
+        if is_livestream:
+            logger.info(f"Detected YouTube livestream: {video_id}, using livestream audio extraction")
+            t2 = threading.Thread(target=extract_livestream_audio, args=(url, video_id))
+        else:
+            logger.info(f"Detected regular YouTube video: {video_id}, using standard audio extraction")
+            t2 = threading.Thread(target=extract_audio_stream, args=(url, video_id))
+
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Đánh dấu video đã được xử lý
+        with open(PROCESSED_FILE, 'a') as f:
+            f.write(video_id + "\n")
+        processed_ids.add(video_id)
+
+        logger.info(f"Successfully processed YouTube video: {video_id}")
+    except Exception as e:
+        logger.error(f"Error processing YouTube video {video_id}: {e}")
+        logger.exception(e)
+
 
 def process_ytb_urls(list_or_channel_url):
+    """
+    Xử lý nhiều video từ playlist hoặc channel
+    """
     # Lấy thông tin chi tiết về từng video trong playlist/channel
     videos = collect_youtube_urls_from_playlist(list_or_channel_url)
 
@@ -342,20 +369,9 @@ def process_ytb_urls(list_or_channel_url):
         logger.info(f"Processing video: {video_id} - {title}")
 
         try:
-            # Xử lý video hiện tại
-            t1 = threading.Thread(target=stream_youtube_video_and_extract, args=(url, video_id))
-            t2 = threading.Thread(target=extract_audio_stream, args=(url, video_id))
-            t1.start()
-            t2.start()
-            t1.join()
-            t2.join()
-
-            # Đánh dấu video đã được xử lý
-            with open(PROCESSED_FILE, 'a') as f:
-                f.write(video_id + "\n")
-            processed_ids.add(video_id)
+            # Sử dụng hàm process_ytb_url để xử lý từng video (áp dụng logic phân biệt livestream)
+            process_ytb_url(url, video_id)
             processed_count += 1
-
         except Exception as e:
             logger.error(f"Error processing video {video_id} - {title}: {e}")
 
@@ -363,6 +379,9 @@ def process_ytb_urls(list_or_channel_url):
 
 
 def process_url(url):
+    """
+    Xử lý một URL (có thể là video đơn, playlist, hoặc channel)
+    """
     if "youtube.com" in url or "youtu.be" in url:
         # Kiểm tra xem URL có phải là playlist hoặc channel không
         if "playlist?list=" in url or "/channel/" in url or "/c/" in url or "/user/" in url:
@@ -378,29 +397,16 @@ def process_url(url):
 
 
 def process_multiple_urls(youtube_urls=None):
+    """
+    Xử lý nhiều URL YouTube
+    """
     if youtube_urls is None:
         logger.warning("No YouTube URLs provided")
         return
 
     if isinstance(youtube_urls, list):
         for url in youtube_urls:
-            # Kiểm tra xem URL có phải là playlist/channel không
-            if "playlist?list=" in url or "/channel/" in url or "/c/" in url or "/user/" in url:
-                logger.info(f"Processing YouTube playlist/channel: {url}")
-                process_ytb_urls(url)
-            else:
-                # Xử lý như video đơn lẻ
-                video_id = get_video_id(url)
-                logger.info(f"Processing single YouTube video: {url}, ID: {video_id}")
-                process_ytb_url(url, video_id=video_id)
+            process_url(url)
     else:
-        url = youtube_urls
-        # Kiểm tra xem URL có phải là playlist/channel không
-        if "playlist?list=" in url or "/channel/" in url or "/c/" in url or "/user/" in url:
-            logger.info(f"Processing YouTube playlist/channel: {url}")
-            process_ytb_urls(url)
-        else:
-            # Xử lý như video đơn lẻ
-            video_id = get_video_id(url)
-            logger.info(f"Processing single YouTube video: {url}, ID: {video_id}")
-            process_ytb_url(url, video_id=video_id)
+        # Xử lý trường hợp chỉ có một URL
+        process_url(youtube_urls)

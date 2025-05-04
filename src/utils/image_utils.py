@@ -55,16 +55,46 @@ def process_frame(metadata_row):
             producer = get_kafka_producer()
             mark_as_processed(producer, metadata_row)
 
-            # Sau khi xử lý xong và kết quả đã gửi đi, xóa object từ MinIO
-            try:
-                minio_client.remove_object(bucket_name, object_name)
-                logger.info(f"Đã xóa frame đã xử lý: {object_name}")
-            except Exception as e:
-                logger.error(f"Lỗi khi xóa frame từ MinIO: {str(e)}")
-
             return {"num_faces": num_faces, "emotions": emotions}
         else:
             return {"num_faces": 0, "emotions": []}
     except Exception as e:
         logger.error(f"Lỗi khi xử lý frame: {str(e)}")
         return {"num_faces": 0, "emotions": []}
+
+# Phiên bản cài tiến --> đánh dấu các frame đã được xử lý bằng commit ở offset thay vì lưu ở topic mới.
+# def process_frame(metadata_row, consumer):
+#     try:
+#         bucket_name = metadata_row["bucket_name"]
+#         object_name = metadata_row["object_name"]
+#
+#         # Lấy frame từ MinIO
+#         frame = get_frame_from_minio(bucket_name, object_name)
+#
+#         if frame is not None:
+#             # Phân tích cảm xúc
+#             num_faces, emotions = analyze_emotions(frame)
+#
+#             # Lưu kết quả phân tích vào database hoặc hệ thống lưu trữ khác nếu cần
+#             # (Không gửi vào topic Kafka khác)
+#
+#             # Xóa frame từ MinIO sau khi xử lý
+#             try:
+#                 minio_client.remove_object(bucket_name, object_name)
+#                 logger.info(f"Đã xóa frame đã xử lý: {object_name}")
+#             except Exception as e:
+#                 logger.error(f"Lỗi khi xóa frame từ MinIO: {str(e)}")
+#
+#             # Đánh dấu message đã được xử lý bằng cách commit offset
+#             consumer.commit()
+#
+#             return {"num_faces": num_faces, "emotions": emotions}
+#         else:
+#             # Vẫn commit offset ngay cả khi không có frame
+#             consumer.commit()
+#             return {"num_faces": 0, "emotions": []}
+#     except Exception as e:
+#         logger.error(f"Lỗi khi xử lý frame: {str(e)}")
+#         # Trong trường hợp lỗi, bạn có thể quyết định không commit offset
+#         # để message có thể được xử lý lại, tùy thuộc vào yêu cầu của ứng dụng
+#         return {"num_faces": 0, "emotions": []}
