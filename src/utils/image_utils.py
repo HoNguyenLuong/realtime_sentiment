@@ -1,4 +1,7 @@
+import datetime
 import io
+import json
+from typing import Any, Dict, List
 from PIL import Image
 from src.consumer.common import get_kafka_producer, mark_as_processed, logger
 from src.video_sentiment.sentiment_analysis import analyze_emotions
@@ -61,6 +64,40 @@ def process_frame(metadata_row):
     except Exception as e:
         logger.error(f"Lỗi khi xử lý frame: {str(e)}")
         return {"num_faces": 0, "emotions": []}
+
+
+def get_sentiment_results(topic_data: str) -> List[Dict[Any, Any]]:
+    json_lines = topic_data.strip().split('\n')
+    results = []
+
+    for line in json_lines:
+        try:
+            data = json.loads(line)
+
+            # Chuyển đổi thời gian thành datetime object
+            processed_time = datetime.datetime.fromisoformat(data["processed_at"])
+            timestamp = datetime.datetime.fromisoformat(data["timestamp"])
+
+            # Format thời gian đẹp hơn
+            processed_time_str = processed_time.strftime("%Y-%m-%d %H:%M:%S")
+            timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+            result = {
+                "frame_id": data["frame_id"],
+                "video_id": data["video_id"],
+                "num_faces": data["num_faces"],
+                "emotions": data["emotions"],
+                "extracted_at": timestamp_str,
+                "processed_at": processed_time_str
+            }
+
+            results.append(result)
+        except json.JSONDecodeError:
+            print(f"Lỗi khi parse JSON: {line}")
+        except Exception as e:
+            print(f"Lỗi xử lý dữ liệu: {str(e)}")
+
+    return results
 
 # Phiên bản cài tiến --> đánh dấu các frame đã được xử lý bằng commit ở offset thay vì lưu ở topic mới.
 # def process_frame(metadata_row, consumer):

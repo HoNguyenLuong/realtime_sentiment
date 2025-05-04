@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 # from src.consumer.controller import get_sentiment_results  # Import từ consumer
 from src.producer.controller import process_url  # Import từ producer
+from src.utils.image_utils import get_sentiment_results
 
 app = Flask(__name__)
 app.secret_key = "dm"
@@ -20,12 +21,12 @@ def index():
         return redirect(url_for("index"))
     return render_template("index.html")
 
-# @app.route("/get_results", methods=["GET"])
-# def get_results():
-#     try:
-#         results = get_sentiment_results()
-#         return jsonify(results)
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
+@app.route("/get_results", methods=["GET"])
+def get_results():
+    try:
+        results = get_sentiment_results("video_frames")
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Không cần if __name__ == "__main__" ở đây, vì file này chỉ định nghĩa API
