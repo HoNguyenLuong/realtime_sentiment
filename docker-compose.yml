@@ -97,7 +97,7 @@ services:
       - spark-worker
     ports:
       - "8000:8000"
-    command: ["sh", "-c", "/app/wait-for-kafka.sh && uvicorn main:app --host 0.0.0.0 --port 8000"]
+    command: ["sh", "-c", "/app/wait-for-kafka.sh && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"]
 
 volumes:
   kafka-data:
