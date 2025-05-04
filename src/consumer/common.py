@@ -1,4 +1,5 @@
 # consumer/common.py
+import base64
 import json
 import logging
 from kafka import KafkaConsumer, KafkaProducer
@@ -48,6 +49,11 @@ def mark_as_processed(producer, metadata):
         logger.info(f"Đã đánh dấu metadata đã xử lý: {metadata.get('frame_id')}")
     except Exception as e:
         logger.error(f"Lỗi khi đánh dấu metadata đã xử lý: {str(e)}")
+
+# decode base64 to bytes
+def decode_base64(data_str: str) -> bytes:
+    return base64.b64decode(data_str)
+
 
 # logging setup
 logging.basicConfig(level=logging.INFO)

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Link Processor</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Thêm Chart.js để vẽ biểu đồ -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        #sentimentChart { max-width: 600px; margin: 20px auto; }
+        #loading { display: none; text-align: center; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">YouTube Link Processor</h1>
+        <form id="youtubeForm" method="POST">
+            <div class="mb-3">
+                <label for="youtube_url" class="form-label">Enter YouTube URL:</label>
+                <input type="url" class="form-control" id="youtube_url" name="youtube_url" placeholder="https://www.youtube.com/watch?v=example" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Process</button>
+        </form>
+
+        <!-- Khu vực hiển thị thông báo -->
+        <div class="mt-3">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+        </div>
+
+        <!-- Khu vực hiển thị loading -->
+        <div id="loading">
+            <p>Processing... Please wait.</p>
+        </div>
+
+        <!-- Khu vực hiển thị kết quả -->
+        <div id="result" class="mt-5" style="display: none;">
+            <h3 class="text-center">Sentiment Analysis Results</h3>
+            <canvas id="sentimentChart"></canvas>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const form = document.getElementById('youtubeForm');
+        const loadingDiv = document.getElementById('loading');
+        const resultDiv = document.getElementById('result');
+        let sentimentChart;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Ngăn form tải lại trang
+            const youtubeUrl = document.getElementById('youtube_url').value;
+
+            // Hiển thị loading
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+
+            try {
+                // Gửi yêu cầu đến server
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 'youtube_url': youtubeUrl })
+                });
+
+                // Sau khi xử lý, gọi API để lấy kết quả
+                const result = await fetch('/get_results');
+                const data = await result.json();
+
+                // Ẩn loading và hiển thị kết quả
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+
+                // Vẽ biểu đồ
+                drawChart(data);
+            } catch (error) {
+                console.error('Error:', error);
+                loadingDiv.style.display = 'none';
+                alert('An error occurred while processing the URL.');
+            }
+        });
+
+        // Hàm vẽ biểu đồ sử dụng Chart.js
+        function drawChart(data) {
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            if (sentimentChart) sentimentChart.destroy(); // Xóa biểu đồ cũ nếu có
+
+            sentimentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral'],
+                    datasets: [{
+                        label: 'Sentiment Distribution',
+                        data: [
+                            data.positive || 0,
+                            data.negative || 0,
+                            data.neutral || 0
+                        ],
+                        backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                        borderColor: ['#28a745', '#dc3545', '#ffc107'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
