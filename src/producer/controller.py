@@ -1,9 +1,21 @@
+import json
+
+from src.producer.config import CONFIG
 from src.producer.ytb_handler import process_ytb_urls, process_ytb_url, get_video_id
 from src.producer.tiktok_handler import process_tiktok_urls, process_tiktok_url
 import logging
+from kafka import KafkaConsumer, KafkaProducer
 
 logger = logging.getLogger(__name__)
 
+def get_kafka_producer():
+    """
+    Tạo và trả về một Kafka producer
+    """
+    return KafkaProducer(
+        bootstrap_servers=CONFIG['kafka']['bootstrap_servers'],  # <<< lấy từ CONFIG
+        value_serializer=lambda x: json.dumps(x).encode('utf-8')
+    )
 
 def process_url(url):
     """

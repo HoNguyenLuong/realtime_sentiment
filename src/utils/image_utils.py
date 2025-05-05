@@ -3,7 +3,8 @@ import io
 import json
 from typing import Any, Dict, List
 from PIL import Image
-from src.consumer.common import get_kafka_producer, mark_as_processed, logger
+from src.consumer.common import  mark_as_processed, logger
+from src.producer.controller import get_kafka_producer
 from src.video_sentiment.sentiment_analysis import analyze_emotions
 from src.producer.config import minio_client
 import numpy as np

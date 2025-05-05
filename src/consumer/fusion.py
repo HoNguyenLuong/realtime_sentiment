@@ -1,53 +1,174 @@
 from collections import Counter
 from datetime import datetime
+import json
 
-# Mapping emotion → sentiment
+# Mapping emotion → sentiment with confidence scores
 emotion_to_sentiment = {
     "happy": ("positive", 1.0),
-    "sad": ("negative", 1.0),
-    "angry": ("negative", 1.0),
+    "sad": ("negative", 0.8),
+    "angry": ("negative", 0.9),
     "fear": ("negative", 0.7),
-    "surprise": ("neutral", 0.8),
+    "surprise": ("neutral", 0.6),  # Surprise có thể tích cực hoặc tiêu cực
     "neutral": ("neutral", 1.0)
 }
+
+# Map sentiment labels to numeric scores
 label_to_score = {"positive": 1, "neutral": 0, "negative": -1}
 
+
+def parse_timestamp(ts_str):
+    """Phân tích chuỗi timestamp thành đối tượng datetime."""
+    try:
+        return datetime.fromisoformat(ts_str)
+    except ValueError:
+        # Xử lý trường hợp timestamp không đúng định dạng
+        print(f"Lỗi phân tích timestamp: {ts_str}")
+        return None
+
+
 def filter_frames_in_chunk(frames, start_time, end_time):
-    start = datetime.fromisoformat(start_time)
-    end = datetime.fromisoformat(end_time)
-    return [f for f in frames if start <= datetime.fromisoformat(f["timestamp"]) <= end]
+    """Lọc frames nằm trong khoảng thời gian của một chunk audio."""
+    if not frames:
+        return []
 
-def majority_emotion(frames):
+    start = parse_timestamp(start_time)
+    end = parse_timestamp(end_time)
+
+    if not start or not end:
+        return []
+
+    return [f for f in frames if start <= parse_timestamp(f["timestamp"]) <= end]
+
+
+def calculate_emotion_distribution(frames):
+    """Tính toán phân phối cảm xúc từ các frames."""
     all_emotions = []
-    for f in frames:
-        all_emotions.extend(f["emotions"])
+    for frame in frames:
+        all_emotions.extend(frame.get("emotions", []))
+
     if not all_emotions:
-        return "neutral"
+        return {"neutral": 1.0}
+
     counter = Counter(all_emotions)
-    return counter.most_common(1)[0][0]
+    total = sum(counter.values())
+    return {emotion: count / total for emotion, count in counter.items()}
 
 
-def fuse_audio_video_chunk(audio_chunk, frames_in_chunk, audio_weight=0.5):
-    # chọn nhãn sentiment có score cao nhất từ audio
-    audio_sentiment_label = max(audio_chunk["sentiment"], key=audio_chunk["sentiment"].get)
-    audio_sentiment_score = audio_chunk["sentiment"][audio_sentiment_label]
+def get_chunk_time_range(chunk_index, chunk_duration=30):
+    """Tính toán khoảng thời gian cho một chunk dựa trên index."""
+    start_seconds = chunk_index * chunk_duration
+    end_seconds = (chunk_index + 1) * chunk_duration
 
-    # xác định emotion chính từ video
-    dominant_emotion = majority_emotion(frames_in_chunk)
-    video_sentiment_label, video_score = emotion_to_sentiment.get(dominant_emotion, ("neutral", 1.0))
+    # Chuyển đổi giây sang chuỗi thời gian
+    # Trong trường hợp thực tế, cần phải có timestamp gốc
+    base_time = datetime.fromisoformat("2025-05-04T16:13:00")
 
-    # map label to score
-    label_to_score = {"positive": 1, "neutral": 0, "negative": -1}
-    audio_val = label_to_score[audio_sentiment_label]
-    video_val = label_to_score[video_sentiment_label]
+    # Sử dụng timedelta để thêm giây vào base_time
+    from datetime import timedelta
+    start_time = base_time + timedelta(seconds=start_seconds)
+    end_time = base_time + timedelta(seconds=end_seconds)
 
-    # weighted fusion
-    combined_score = audio_weight * audio_sentiment_score * audio_val + (1 - audio_weight) * video_score * video_val
+    return start_time.isoformat(), end_time.isoformat()
 
-    # decision
+
+def weighted_sentiment_score(sentiment_dict):
+    """Tính toán điểm sentiment có trọng số từ dict sentiment."""
+    score = 0
+    for label, weight in sentiment_dict.items():
+        label_lower = label.lower()  # Chuẩn hóa key
+        if label_lower in label_to_score:
+            score += label_to_score[label_lower] * weight
+    return score
+
+
+def fuse_audio_video_chunk(audio_chunk, frames_in_chunk, audio_weight=0.6):
+    """
+    Kết hợp sentiment từ audio và video với trọng số.
+
+    Args:
+        audio_chunk: Dict chứa thông tin sentiment từ audio
+        frames_in_chunk: List frames trong khoảng thời gian của chunk
+        audio_weight: Trọng số cho audio (0-1)
+
+    Returns:
+        String: "positive", "negative", hoặc "neutral"
+    """
+    # Xử lý dữ liệu audio
+    if not audio_chunk.get("sentiment"):
+        audio_score = 0
+    else:
+        # Lấy nhãn sentiment có score cao nhất từ audio
+        audio_sentiment_label = max(audio_chunk["sentiment"], key=audio_chunk["sentiment"].get)
+        audio_sentiment_score = audio_chunk["sentiment"][audio_sentiment_label]
+        audio_score = label_to_score.get(audio_sentiment_label.lower(), 0) * audio_sentiment_score
+
+    # Xử lý dữ liệu video
+    if not frames_in_chunk:
+        video_score = 0
+    else:
+        # Tính phân phối cảm xúc từ video
+        emotion_distribution = calculate_emotion_distribution(frames_in_chunk)
+
+        # Tính điểm sentiment tổng hợp từ phân phối cảm xúc
+        video_score = 0
+        for emotion, proportion in emotion_distribution.items():
+            sentiment_label, confidence = emotion_to_sentiment.get(emotion, ("neutral", 0.5))
+            video_score += label_to_score.get(sentiment_label, 0) * proportion * confidence
+
+    # Kết hợp với trọng số
+    combined_score = audio_weight * audio_score + (1 - audio_weight) * video_score
+
+    # Quyết định nhãn sentiment cuối cùng
     if combined_score > 0.2:
         return "positive"
     elif combined_score < -0.2:
         return "negative"
     else:
         return "neutral"
+
+
+def process_data(audio_chunks, frames, chunk_duration=30):
+    """
+    Xử lý toàn bộ dữ liệu âm thanh và video để tạo kết quả tổng hợp.
+
+    Args:
+        audio_chunks: List các chunk audio đã được phân tích
+        frames: List các frame video đã được phân tích
+        chunk_duration: Thời lượng mỗi chunk (giây)
+
+    Returns:
+        List kết quả sentiment được kết hợp cho mỗi chunk
+    """
+    results = []
+
+    for i, chunk in enumerate(audio_chunks):
+        start_time, end_time = get_chunk_time_range(i, chunk_duration)
+        frames_in_chunk = filter_frames_in_chunk(frames, start_time, end_time)
+
+        fusion_result = fuse_audio_video_chunk(chunk, frames_in_chunk)
+
+        results.append({
+            "chunk_index": i,
+            "time_range": f"{i * chunk_duration}s - {(i + 1) * chunk_duration}s",
+            "audio_text": chunk.get("text", ""),
+            "audio_sentiment": chunk.get("sentiment", {}),
+            "audio_emotion": chunk.get("emotion", []),
+            "video_frames_count": len(frames_in_chunk),
+            "fused_sentiment": fusion_result
+        })
+
+    return results
+
+def process_and_save_fusion_results_to_minio(client, fusion_results, bucket_name, object_name):
+    import json, io
+
+    json_data = json.dumps(fusion_results, indent=2).encode("utf-8")
+    data_stream = io.BytesIO(json_data)
+
+    client.put_object(
+        bucket_name=bucket_name,
+        object_name=object_name,
+        data=data_stream,
+        length=len(json_data),
+        content_type="application/json"
+    )

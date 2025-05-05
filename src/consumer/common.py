@@ -20,14 +20,6 @@ def get_kafka_consumer(topic: str):
         group_id=f"{topic}_consumer_group"
     )
 
-def get_kafka_producer():
-    """
-    Tạo và trả về một Kafka producer
-    """
-    return KafkaProducer(
-        bootstrap_servers=CONFIG['kafka']['bootstrap_servers'],  # <<< lấy từ CONFIG
-        value_serializer=lambda x: json.dumps(x).encode('utf-8')
-    )
 
 def mark_as_processed(producer, metadata):
     """
