@@ -164,6 +164,8 @@ def process_and_save_fusion_results_to_minio(client, fusion_results, bucket_name
 
     frames_results = get_sentiment_results("emotion_frames")
 
+    fusion_results = process_data(audio_chunks, frames_results)
+
     json_data = json.dumps(fusion_results, indent=2).encode("utf-8")
     data_stream = io.BytesIO(json_data)
 
