@@ -118,7 +118,7 @@
         }
 
         #result {
-            display: none;
+            display: {% if result and result.total > 0 %}block{% else %}none{% endif %};
             padding: 20px;
             background-color: #fff;
             border-radius: 15px;
@@ -173,7 +173,7 @@
 
         .video-preview {
             margin-top: 30px;
-            display: none;
+            display: {% if youtube_url %}block{% else %}none{% endif %};
             text-align: center;
         }
 
@@ -187,6 +187,147 @@
             margin-top: 15px;
             font-weight: 600;
             color: var(--dark-color);
+        }
+
+        .no-comments-message {
+            text-align: center;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: {% if result and result.total == 0 %}block{% else %}none{% endif %};
+        }
+
+        .video-emotions-link {
+            display: {% if youtube_url %}block{% else %}none{% endif %};
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        /* Video frames results styling */
+        #video-frames-results {
+            margin-top: 30px;
+            display: {% if youtube_url %}block{% else %}none{% endif %};
+        }
+
+        .frames-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .frames-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            background-color: #fff;
+        }
+
+        .frame-card {
+            margin-bottom: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            padding: 15px;
+            border-left: 5px solid var(--primary-color);
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .frame-card.new {
+            border-left: 5px solid #4ade80;
+            background-color: #f0fff4;
+        }
+
+        .frame-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .frame-id {
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .frame-time {
+            font-size: 0.85rem;
+            color: #777;
+        }
+
+        .frame-details {
+            display: flex;
+            margin-top: 10px;
+        }
+
+        .frame-faces {
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+        }
+
+        .faces-icon {
+            color: var(--primary-color);
+            margin-right: 5px;
+        }
+
+        .emotions-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .emotion-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .happy {
+            background-color: #4ade80;
+            color: white;
+        }
+
+        .sad {
+            background-color: #60a5fa;
+            color: white;
+        }
+
+        .angry {
+            background-color: #f87171;
+            color: white;
+        }
+
+        .surprise {
+            background-color: #fbbf24;
+            color: white;
+        }
+
+        .fear {
+            background-color: #a78bfa;
+            color: white;
+        }
+
+        .neutral {
+            background-color: #9ca3af;
+            color: white;
+        }
+
+        .disgusted {
+            background-color: #10b981;
+            color: white;
+        }
+
+        .no-frames-message {
+            text-align: center;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
         }
 
         /* Responsive styles */
@@ -211,6 +352,15 @@
             .sentiment-item {
                 margin: 5px 0;
             }
+
+            .frame-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .frame-time {
+                margin-top: 5px;
+            }
         }
     </style>
 </head>
@@ -222,31 +372,37 @@
         </div>
 
         <div class="app-body">
-            <form id="youtubeForm" method="POST">
+            <!-- Messages from server (replacing Flash messages) -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.category }} alert-dismissible fade show" role="alert">
+                        <i class="fas fa-{% if message.category == 'success' %}check-circle{% elif message.category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %} me-2"></i>
+                        {{ message.message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <form id="youtubeForm" method="POST" action="/">
                 <div class="url-input-container">
                     <i class="fas fa-link"></i>
                     <input type="url" class="form-control" id="youtube_url" name="youtube_url"
-                           placeholder="Paste YouTube URL here (e.g., https://www.youtube.com/watch?v=example)" required>
+                           placeholder="Paste YouTube URL here (e.g., https://www.youtube.com/watch?v=example)"
+                           value="{{ youtube_url or '' }}" required>
                 </div>
                 <button type="submit" class="btn btn-primary btn-process w-100">
                     <i class="fas fa-chart-pie me-2"></i> Analyze Sentiment
                 </button>
             </form>
 
-            <!-- Alert messages -->
-            <div class="mt-3">
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                            <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %} me-2"></i>
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-                {% endwith %}
+            <!-- Alert messages for non-flash errors -->
+            {% if error %}
+            <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                {{ error }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
+            {% endif %}
 
             <!-- Loading indicator -->
             <div id="loading">
@@ -256,30 +412,80 @@
 
             <!-- Video preview -->
             <div class="video-preview" id="videoPreview">
-                <iframe id="videoIframe" width="560" height="315" frameborder="0" allowfullscreen></iframe>
-                <div class="video-title" id="videoTitle"></div>
+                {% if youtube_url %}
+                <iframe id="videoIframe" width="560" height="315" src="https://www.youtube.com/embed/{{ youtube_url.split('v=')[1].split('&')[0] if 'v=' in youtube_url else youtube_url.split('/')[-1] }}" frameborder="0" allowfullscreen></iframe>
+                <div class="video-title" id="videoTitle">Video Analysis</div>
+                {% endif %}
+            </div>
+
+            <!-- Link to video emotions analysis page -->
+            <div class="video-emotions-link">
+                <a href="/video_emotions" class="btn btn-outline-primary">
+                    <i class="fas fa-film me-2"></i> View Video Frame Emotions Analysis
+                </a>
+            </div>
+
+            <!-- No comments message -->
+            <div class="no-comments-message" id="noCommentsMessage">
+                <i class="fas fa-info-circle fa-2x mb-3 text-primary"></i>
+                <h4>No Comments Analyzed</h4>
+                <p>Either the video has no comments or we're still processing them. Try another video or check back later.</p>
             </div>
 
             <!-- Results section -->
             <div id="result" class="mt-4">
-                <h3>Sentiment Analysis Results</h3>
+                <h3>Comment Sentiment Analysis Results</h3>
                 <canvas id="sentimentChart"></canvas>
 
                 <div class="sentiment-summary">
                     <div class="sentiment-item positive">
                         <i class="fas fa-smile-beam mb-2" style="font-size: 24px;"></i>
                         <div>Positive</div>
-                        <div id="positivePercentage" style="font-size: 20px;">0%</div>
+                        <div id="positivePercentage" style="font-size: 20px;">
+                            {% if result and result.total > 0 %}
+                            {{ ((result.positive / result.total) * 100) | round | int }}%
+                            {% else %}
+                            0%
+                            {% endif %}
+                        </div>
                     </div>
                     <div class="sentiment-item negative">
                         <i class="fas fa-angry mb-2" style="font-size: 24px;"></i>
                         <div>Negative</div>
-                        <div id="negativePercentage" style="font-size: 20px;">0%</div>
+                        <div id="negativePercentage" style="font-size: 20px;">
+                            {% if result and result.total > 0 %}
+                            {{ ((result.negative / result.total) * 100) | round | int }}%
+                            {% else %}
+                            0%
+                            {% endif %}
+                        </div>
                     </div>
                     <div class="sentiment-item neutral">
                         <i class="fas fa-meh mb-2" style="font-size: 24px;"></i>
                         <div>Neutral</div>
-                        <div id="neutralPercentage" style="font-size: 20px;">0%</div>
+                        <div id="neutralPercentage" style="font-size: 20px;">
+                            {% if result and result.total > 0 %}
+                            {{ ((result.neutral / result.total) * 100) | round | int }}%
+                            {% else %}
+                            0%
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Frames Results Section -->
+            <div id="video-frames-results" class="mt-4">
+                <div class="frames-header">
+                    <h3>Video Frame Sentiment Analysis</h3>
+                    <p class="text-muted">Showing real-time frame analysis results</p>
+                </div>
+
+                <div class="frames-container" id="framesContainer">
+                    <div class="no-frames-message" id="noFramesMessage">
+                        <i class="fas fa-film fa-2x mb-3 text-primary"></i>
+                        <h4>No Frame Analysis Yet</h4>
+                        <p>Frame analysis will appear here once processing begins</p>
                     </div>
                 </div>
             </div>
@@ -292,10 +498,120 @@
         const loadingDiv = document.getElementById('loading');
         const resultDiv = document.getElementById('result');
         const videoPreview = document.getElementById('videoPreview');
-        const videoIframe = document.getElementById('videoIframe');
-        const videoTitle = document.getElementById('videoTitle');
+        const noCommentsMessage = document.getElementById('noCommentsMessage');
+        const framesContainer = document.getElementById('framesContainer');
+        const noFramesMessage = document.getElementById('noFramesMessage');
+        const videoFramesResults = document.getElementById('video-frames-results');
 
-        let sentimentChart;
+        // Track processed frames to avoid duplicates
+        const processedFrames = new Set();
+        let lastFrameCount = 0;
+
+        {% if result %}
+        // If we have results, initialize the chart
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+
+            // Check if we have any data to display
+            const total = {{ result.total | default(0) }};
+
+            if (total > 0) {
+                window.sentimentChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Positive', 'Negative', 'Neutral'],
+                        datasets: [{
+                            label: 'Comment Sentiment Distribution',
+                            data: [
+                                {{ result.positive | default(0) }},
+                                {{ result.negative | default(0) }},
+                                {{ result.neutral | default(0) }}
+                            ],
+                            backgroundColor: ['#4ade80', '#f87171', '#fbbf24'],
+                            borderColor: ['#4ade80', '#f87171', '#fbbf24'],
+                            borderWidth: 1,
+                            borderRadius: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                titleFont: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                bodyFont: {
+                                    size: 14
+                                },
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            const total = {{ result.total | default(1) }};
+                                            const percentage = Math.round((context.parsed.y / total) * 100);
+                                            label += `${context.parsed.y} comments (${percentage}%)`;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Comments',
+                                    font: {
+                                        size: 14,
+                                        weight: 'bold'
+                                    }
+                                },
+                                ticks: {
+                                    precision: 0
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Sentiment Category',
+                                    font: {
+                                        size: 14,
+                                        weight: 'bold'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Show results and hide no comments message
+                resultDiv.style.display = 'block';
+                noCommentsMessage.style.display = 'none';
+            } else {
+                // Show no comments message and hide results
+                resultDiv.style.display = 'none';
+                noCommentsMessage.style.display = 'block';
+            }
+        });
+        {% endif %}
+
+        // Show loading animation when form is submitted
+        form.addEventListener('submit', function() {
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            noCommentsMessage.style.display = 'none';
+        });
 
         // Function to extract YouTube video ID from URL
         function getYoutubeId(url) {
@@ -304,158 +620,166 @@
             return (match && match[2].length === 11) ? match[2] : null;
         }
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const youtubeUrl = document.getElementById('youtube_url').value;
+        // Helper function to create emotion badges
+        function createEmotionBadges(emotions) {
+            let badgesHTML = '';
 
-            // Extract video ID and setup preview
-            const videoId = getYoutubeId(youtubeUrl);
-            if (videoId) {
-                videoIframe.src = `https://www.youtube.com/embed/${videoId}`;
-                videoPreview.style.display = 'block';
-                // In a real app, you might want to fetch the video title using YouTube API
-                videoTitle.textContent = "Video Analysis";
+            if (!emotions) return badgesHTML;
+
+            // Map emotion names to appropriate classes
+            const emotionClasses = {
+                'happy': 'happy',
+                'sad': 'sad',
+                'angry': 'angry',
+                'surprise': 'surprise',
+                'fear': 'fear',
+                'neutral': 'neutral',
+                'disgust': 'disgusted'
+            };
+
+            // Process each emotion in the object
+            for (const [emotion, value] of Object.entries(emotions)) {
+                if (value > 0) {
+                    const className = emotionClasses[emotion.toLowerCase()] || 'neutral';
+                    badgesHTML += `<span class="emotion-badge ${className}">${emotion}: ${value}</span>`;
+                }
             }
 
-            // Show loading
-            loadingDiv.style.display = 'block';
-            resultDiv.style.display = 'none';
+            return badgesHTML;
+        }
 
-            try {
-                // Send request to server
-                const response = await fetch('/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 'youtube_url': youtubeUrl })
-                });
+        // Function to create a frame card
+        function createFrameCard(frame, isNew = false) {
+            return `
+                <div class="frame-card ${isNew ? 'new' : ''}" id="frame-${frame.frame_id}">
+                    <div class="frame-header">
+                        <div class="frame-id">Frame #${frame.frame_id}</div>
+                        <div class="frame-time">
+                            <i class="far fa-clock me-1"></i> Processed at: ${frame.processed_at}
+                        </div>
+                    </div>
+                    <div class="frame-details">
+                        <div class="frame-faces">
+                            <i class="fas fa-user faces-icon"></i>
+                            <span>${frame.num_faces} face${frame.num_faces !== 1 ? 's' : ''} detected</span>
+                        </div>
+                        <div class="emotions-badges">
+                            ${createEmotionBadges(frame.emotions)}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
-                // Get results
-                const result = await fetch('/get_results');
-                const data = await result.json();
+        // Function to update video frames results
+        function updateVideoFrames() {
+            fetch('/api/get_video_sentiments')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        // Hide the no frames message
+                        noFramesMessage.style.display = 'none';
 
-                // Hide loading and show results
-                loadingDiv.style.display = 'none';
-                resultDiv.style.display = 'block';
+                        // Check if we have new frames
+                        const newFrames = data.filter(frame => !processedFrames.has(frame.frame_id));
 
-                // Draw chart
-                drawChart(data);
+                        if (newFrames.length > 0) {
+                            // Update our set of processed frames
+                            newFrames.forEach(frame => processedFrames.add(frame.frame_id));
 
-                // Update percentages
-                updatePercentages(data);
-            } catch (error) {
-                console.error('Error:', error);
-                loadingDiv.style.display = 'none';
+                            // Sort newest first
+                            newFrames.sort((a, b) => {
+                                return new Date(b.processed_at) - new Date(a.processed_at);
+                            });
 
-                // Show error alert
-                const alertContainer = document.querySelector('.mt-3');
-                const alertElement = document.createElement('div');
-                alertElement.className = 'alert alert-danger alert-dismissible fade show';
-                alertElement.innerHTML = `
-                    <i class="fas fa-exclamation-circle me-2"></i>
-                    An error occurred while processing the URL.
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                `;
-                alertContainer.appendChild(alertElement);
-            }
-        });
+                            // Create HTML for new frames
+                            let newFramesHTML = '';
+                            newFrames.forEach(frame => {
+                                newFramesHTML += createFrameCard(frame, true);
+                            });
 
-        // Function to draw chart using Chart.js
-        function drawChart(data) {
-            const ctx = document.getElementById('sentimentChart').getContext('2d');
-            if (sentimentChart) sentimentChart.destroy();
+                            // Insert at the beginning of the container
+                            if (framesContainer.innerHTML === noFramesMessage.outerHTML) {
+                                framesContainer.innerHTML = newFramesHTML;
+                            } else {
+                                framesContainer.insertAdjacentHTML('afterbegin', newFramesHTML);
+                            }
 
-            sentimentChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Positive', 'Negative', 'Neutral'],
-                    datasets: [{
-                        label: 'Comment Sentiment Distribution',
-                        data: [
-                            data.positive || 0,
-                            data.negative || 0,
-                            data.neutral || 0
-                        ],
-                        backgroundColor: ['#4ade80', '#f87171', '#fbbf24'],
-                        borderColor: ['#4ade80', '#f87171', '#fbbf24'],
-                        borderWidth: 1,
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            padding: 12,
-                            titleFont: {
-                                size: 14,
-                                weight: 'bold'
-                            },
-                            bodyFont: {
-                                size: 14
-                            },
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
+                            // After a second, remove the 'new' class from the new cards
+                            setTimeout(() => {
+                                newFrames.forEach(frame => {
+                                    const frameElement = document.getElementById(`frame-${frame.frame_id}`);
+                                    if (frameElement) {
+                                        frameElement.classList.remove('new');
                                     }
-                                    if (context.parsed.y !== null) {
-                                        const total = data.positive + data.negative + data.neutral;
-                                        const percentage = Math.round((context.parsed.y / total) * 100);
-                                        label += `${context.parsed.y} comments (${percentage}%)`;
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Number of Comments',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            },
-                            ticks: {
-                                precision: 0
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Sentiment Category',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            }
+                                });
+                            }, 1000);
                         }
                     }
-                }
-            });
+                })
+                .catch(error => console.error('Error updating video frames:', error));
         }
 
-        // Function to update percentage displays
-        function updatePercentages(data) {
-            const total = data.positive + data.negative + data.neutral;
-            if (total > 0) {
-                document.getElementById('positivePercentage').textContent =
-                    Math.round((data.positive / total) * 100) + '%';
-                document.getElementById('negativePercentage').textContent =
-                    Math.round((data.negative / total) * 100) + '%';
-                document.getElementById('neutralPercentage').textContent =
-                    Math.round((data.neutral / total) * 100) + '%';
-            }
+        // Add real-time update for comment sentiment
+        {% if youtube_url %}
+        // Only run this if we have a YouTube URL
+        let updateInterval;
+        let framesUpdateInterval;
+
+        function updateSentimentData() {
+            fetch('/api/get_results')
+                .then(response => response.json())
+                .then(data => {
+                    // Update chart if it exists
+                    if (window.sentimentChart) {
+                        window.sentimentChart.data.datasets[0].data = [
+                            data.positive,
+                            data.negative,
+                            data.neutral
+                        ];
+                        window.sentimentChart.update();
+                    }
+
+                    // Update percentages
+                    const total = data.positive + data.negative + data.neutral;
+                    if (total > 0) {
+                        document.getElementById('positivePercentage').textContent =
+                            Math.round((data.positive / total) * 100) + '%';
+                        document.getElementById('negativePercentage').textContent =
+                            Math.round((data.negative / total) * 100) + '%';
+                        document.getElementById('neutralPercentage').textContent =
+                            Math.round((data.neutral / total) * 100) + '%';
+
+                        // Show results if we have data
+                        resultDiv.style.display = 'block';
+                        noCommentsMessage.style.display = 'none';
+                    } else {
+                        // No comments yet
+                        resultDiv.style.display = 'none';
+                        noCommentsMessage.style.display = 'block';
+                    }
+                })
+                .catch(error => console.error('Error updating sentiment data:', error));
         }
+
+        // Start polling for updates every 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            updateSentimentData(); // Initial update for comments
+            updateVideoFrames();   // Initial update for video frames
+
+            updateInterval = setInterval(updateSentimentData, 5000);
+            framesUpdateInterval = setInterval(updateVideoFrames, 3000); // Check for new frames every 3 seconds
+
+            // Make sure video frames section is visible
+            videoFramesResults.style.display = 'block';
+        });
+
+        // Clean up when leaving the page
+        window.addEventListener('beforeunload', function() {
+            clearInterval(updateInterval);
+            clearInterval(framesUpdateInterval);
+        });
+        {% endif %}
     </script>
 </body>
 </html>
