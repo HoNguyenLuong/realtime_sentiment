@@ -1,11 +1,10 @@
-import datetime
 import io
-import json
 from typing import Any, Dict, List
 from PIL import Image
-from src.consumer.common import get_kafka_producer, mark_as_processed, logger
+from src.consumer.common import get_kafka_producer, mark_as_processed, logger, get_kafka_consumer
 from src.video_sentiment.sentiment_analysis import analyze_emotions
 from src.producer.config import minio_client
+from datetime import datetime
 import numpy as np
 
 def get_frame_from_minio(bucket_name, object_name):
@@ -66,36 +65,54 @@ def process_frame(metadata_row):
         return {"num_faces": 0, "emotions": []}
 
 
-def get_sentiment_results(topic_data: str) -> List[Dict[Any, Any]]:
-    json_lines = topic_data.strip().split('\n')
+def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
+    """
+    Lấy kết quả sentiment từ Kafka topic
+
+    Args:
+        topic_name (str): Tên của Kafka topic
+
+    Returns:
+        List[Dict[Any, Any]]: Danh sách các kết quả sentiment
+    """
+
     results = []
 
-    for line in json_lines:
-        try:
-            data = json.loads(line)
+    try:
+        # Tạo Kafka consumer
+        consumer = get_kafka_consumer(topic_name)
 
-            # Chuyển đổi thời gian thành datetime object
-            processed_time = datetime.datetime.fromisoformat(data["processed_at"])
-            timestamp = datetime.datetime.fromisoformat(data["timestamp"])
+        # Thiết lập timeout để không chờ vô hạn
+        # Điều này sẽ đọc tất cả các message có sẵn trong topic và dừng lại
+        messages = consumer.poll(timeout_ms=5000, max_records=1000)
 
-            # Format thời gian đẹp hơn
-            processed_time_str = processed_time.strftime("%Y-%m-%d %H:%M:%S")
-            timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        for topic_partition, partition_messages in messages.items():
+            for message in partition_messages:
+                try:
+                    data = message.value
 
-            result = {
-                "frame_id": data["frame_id"],
-                "video_id": data["video_id"],
-                "num_faces": data["num_faces"],
-                "emotions": data["emotions"],
-                "extracted_at": timestamp_str,
-                "processed_at": processed_time_str
-            }
+                    # Xử lý thời gian và định dạng nếu cần
+                    processed_time = datetime.fromisoformat(data.get("processed_at", datetime.now().isoformat()))
+                    timestamp = datetime.fromisoformat(data.get("timestamp", datetime.now().isoformat()))
 
-            results.append(result)
-        except json.JSONDecodeError:
-            print(f"Lỗi khi parse JSON: {line}")
-        except Exception as e:
-            print(f"Lỗi xử lý dữ liệu: {str(e)}")
+                    result = {
+                        "frame_id": data.get("frame_id", 0),
+                        "video_id": data.get("video_id", ""),
+                        "num_faces": data.get("num_faces", 0),
+                        "emotions": data.get("emotions", {}),
+                        "extracted_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "processed_at": processed_time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
+
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Lỗi xử lý message từ Kafka: {str(e)}")
+
+        # Đóng consumer sau khi sử dụng
+        consumer.close()
+
+    except Exception as e:
+        logger.error(f"Lỗi đọc dữ liệu sentiment từ Kafka: {str(e)}")
 
     return results
 

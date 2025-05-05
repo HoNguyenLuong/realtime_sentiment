@@ -24,3 +24,5 @@ uvicorn
 yt-dlp
 ffmpeg
 tensorflow==2.10.1
+python-multipart
+jinja2==3.1.2
