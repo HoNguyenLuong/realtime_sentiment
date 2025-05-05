@@ -1,6 +1,7 @@
 from collections import Counter
 from datetime import datetime
-import json
+import json, io
+from src.utils.image_utils import get_sentiment_results
 
 # Mapping emotion → sentiment with confidence scores
 emotion_to_sentiment = {
@@ -160,7 +161,8 @@ def process_data(audio_chunks, frames, chunk_duration=30):
     return results
 
 def process_and_save_fusion_results_to_minio(client, fusion_results, bucket_name, object_name):
-    import json, io
+
+    frames_results = get_sentiment_results("emotion_frames")
 
     json_data = json.dumps(fusion_results, indent=2).encode("utf-8")
     data_stream = io.BytesIO(json_data)
