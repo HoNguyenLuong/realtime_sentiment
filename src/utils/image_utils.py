@@ -8,7 +8,7 @@ from src.producer.controller import get_kafka_producer
 from src.video_sentiment.sentiment_analysis import analyze_emotions
 from src.producer.config import minio_client
 import numpy as np
-
+import json
 def get_frame_from_minio(bucket_name, object_name):
     """
     Lấy frame JPG từ MinIO và chuyển đổi thành numpy array
@@ -66,26 +66,10 @@ def process_frame(metadata_row):
         logger.error(f"Lỗi khi xử lý frame: {str(e)}")
         return {"num_faces": 0, "emotions": []}
 
-
 def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
-    """
-    Lấy kết quả sentiment từ Kafka topic
-
-    Args:
-        topic_name (str): Tên của Kafka topic
-
-    Returns:
-        List[Dict[Any, Any]]: Danh sách các kết quả sentiment
-    """
-
     results = []
-
     try:
-        # Tạo Kafka consumer
         consumer = get_kafka_consumer(topic_name)
-
-        # Thiết lập timeout để không chờ vô hạn
-        # Điều này sẽ đọc tất cả các message có sẵn trong topic và dừng lại
         messages = consumer.poll(timeout_ms=5000, max_records=1000)
 
         for topic_partition, partition_messages in messages.items():
@@ -93,26 +77,36 @@ def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
                 try:
                     data = message.value
 
-                    # Xử lý thời gian và định dạng nếu cần
+                    # Xử lý thời gian
                     processed_time = datetime.fromisoformat(data.get("processed_at", datetime.now().isoformat()))
                     timestamp = datetime.fromisoformat(data.get("timestamp", datetime.now().isoformat()))
+
+                    # Xử lý num_faces để đảm bảo là số nguyên
+                    num_faces = data.get("num_faces", 0)
+                    try:
+                        num_faces = int(num_faces)  # Chuyển đổi thành số nếu là chuỗi
+                    except (ValueError, TypeError):
+                        num_faces = 0
+
+                    # Xử lý emotions: chuyển từ mảng thành dict để phù hợp với giao diện
+                    emotions_list = data.get("emotions", [])
+                    emotions_dict = {}
+                    for emotion in emotions_list:
+                        emotions_dict[emotion] = 1  # Gán giá trị 1 cho mỗi cảm xúc có trong mảng
 
                     result = {
                         "frame_id": data.get("frame_id", 0),
                         "video_id": data.get("video_id", ""),
-                        "num_faces": data.get("num_faces", 0),
-                        "emotions": data.get("emotions", {}),
+                        "num_faces": num_faces,
+                        "emotions": emotions_dict,  # Trả về dict thay vì list
                         "extracted_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                         "processed_at": processed_time.strftime("%Y-%m-%d %H:%M:%S")
                     }
-
                     results.append(result)
                 except Exception as e:
                     logger.error(f"Lỗi xử lý message từ Kafka: {str(e)}")
 
-        # Đóng consumer sau khi sử dụng
         consumer.close()
-
     except Exception as e:
         logger.error(f"Lỗi đọc dữ liệu sentiment từ Kafka: {str(e)}")
 
