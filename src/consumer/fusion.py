@@ -1,100 +1,53 @@
-import numpy as np
+from collections import Counter
+from datetime import datetime
+
+# Mapping emotion → sentiment
+emotion_to_sentiment = {
+    "happy": ("positive", 1.0),
+    "sad": ("negative", 1.0),
+    "angry": ("negative", 1.0),
+    "fear": ("negative", 0.7),
+    "surprise": ("neutral", 0.8),
+    "neutral": ("neutral", 1.0)
+}
+label_to_score = {"positive": 1, "neutral": 0, "negative": -1}
+
+def filter_frames_in_chunk(frames, start_time, end_time):
+    start = datetime.fromisoformat(start_time)
+    end = datetime.fromisoformat(end_time)
+    return [f for f in frames if start <= datetime.fromisoformat(f["timestamp"]) <= end]
+
+def majority_emotion(frames):
+    all_emotions = []
+    for f in frames:
+        all_emotions.extend(f["emotions"])
+    if not all_emotions:
+        return "neutral"
+    counter = Counter(all_emotions)
+    return counter.most_common(1)[0][0]
 
 
+def fuse_audio_video_chunk(audio_chunk, frames_in_chunk, audio_weight=0.5):
+    # chọn nhãn sentiment có score cao nhất từ audio
+    audio_sentiment_label = max(audio_chunk["sentiment"], key=audio_chunk["sentiment"].get)
+    audio_sentiment_score = audio_chunk["sentiment"][audio_sentiment_label]
 
+    # xác định emotion chính từ video
+    dominant_emotion = majority_emotion(frames_in_chunk)
+    video_sentiment_label, video_score = emotion_to_sentiment.get(dominant_emotion, ("neutral", 1.0))
 
-# Function to combine sentiment labels using Weighted Average
-def combine_weighted_average(audio_label, audio_score, video_label, video_score, audio_weight=0.5):
-    """
-    Combine sentiment labels using weighted average of confidence scores.
+    # map label to score
+    label_to_score = {"positive": 1, "neutral": 0, "negative": -1}
+    audio_val = label_to_score[audio_sentiment_label]
+    video_val = label_to_score[video_sentiment_label]
 
-    Parameters:
-    - audio_label: str, sentiment label from audio ('positive', 'negative', 'neutral')
-    - audio_score: float, confidence score for audio label (0 to 1)
-    - video_label: str, sentiment label from video ('positive', 'negative', 'neutral')
-    - video_score: float, confidence score for video label (0 to 1)
-    - audio_weight: float, weight for audio prediction (default 0.5)
+    # weighted fusion
+    combined_score = audio_weight * audio_sentiment_score * audio_val + (1 - audio_weight) * video_score * video_val
 
-    Returns:
-    - str, combined sentiment label ('positive', 'negative', 'neutral')
-    """
-    # Map labels to numeric scores
-    label_to_score = {"positive": 1, "negative": -1, "neutral": 0}
-    audio_numeric = label_to_score.get(audio_label, 0)
-    video_numeric = label_to_score.get(video_label, 0)
-
-    # Calculate weighted score
-    combined_score = audio_weight * audio_score * audio_numeric + (1 - audio_weight) * video_score * video_numeric
-
-    # Thresholds for classification
+    # decision
     if combined_score > 0.2:
         return "positive"
     elif combined_score < -0.2:
         return "negative"
     else:
         return "neutral"
-
-
-# Function to combine sentiment labels using Majority Voting
-def combine_majority_voting(audio_label, audio_score, video_label, video_score):
-    """
-    Combine sentiment labels using majority voting or confidence-based priority.
-
-    Parameters:
-    - audio_label: str, sentiment label from audio ('positive', 'negative', 'neutral')
-    - audio_score: float, confidence score for audio label (0 to 1)
-    - video_label: str, sentiment label from video ('positive', 'negative', 'neutral')
-    - video_score: float, confidence score for video label (0 to 1)
-
-    Returns:
-    - str, combined sentiment label ('positive', 'negative', 'neutral')
-    """
-    if audio_score > video_score:
-        return audio_label
-    elif video_score > audio_score:
-        return video_label
-    else:
-        # If scores are equal, prioritize audio (arbitrary choice, can be adjusted)
-        return audio_label
-
-
-# Main function to process and combine sentiments
-def combine_sentiments(audio_label, audio_score, video_label, video_score, method="weighted_average", audio_weight=0.5):
-    """
-    Main function to combine sentiments using specified method.
-
-    Parameters:
-    - audio_label, audio_score, video_label, video_score: as described above
-    - method: str, either 'weighted_average' or 'majority_voting'
-    - audio_weight: float, weight for audio in weighted_average method
-
-    Returns:
-    - str, final sentiment label
-    """
-    if method == "weighted_average":
-        return combine_weighted_average(audio_label, audio_score, video_label, video_score, audio_weight)
-    elif method == "majority_voting":
-        return combine_majority_voting(audio_label, audio_score, video_label, video_score)
-    else:
-        raise ValueError("Invalid method. Choose 'weighted_average' or 'majority_voting'.")
-
-
-# Example usage
-def main():
-    # Example inputs (replace with your actual labels and scores)
-    audio_label = "positive"
-    audio_score = 0.8
-    video_label = "neutral"
-    video_score = 0.6
-
-    # Combine using Weighted Average
-    result_weighted = combine_sentiments(audio_label, audio_score, video_label, video_score, method="weighted_average")
-    print(f"Weighted Average Result: {result_weighted}")
-
-    # Combine using Majority Voting
-    result_voting = combine_sentiments(audio_label, audio_score, video_label, video_score, method="majority_voting")
-    print(f"Majority Voting Result: {result_voting}")
-
-
-if __name__ == "__main__":
-    main()
