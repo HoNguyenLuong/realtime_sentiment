@@ -54,9 +54,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 import threading
 from contextlib import asynccontextmanager
 import time
-import json
 import os
-
 # Import các module cần thiết
 from src.api.routes import router as api_router
 from src.producer.controller import process_url

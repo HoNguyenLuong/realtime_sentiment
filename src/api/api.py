@@ -24,7 +24,7 @@ def index():
 @app.route("/get_results", methods=["GET"])
 def get_results():
     try:
-        results = get_sentiment_results("video_frames")
+        results = get_sentiment_results("emotion_results")
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
