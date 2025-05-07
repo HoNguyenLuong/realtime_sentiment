@@ -1,6 +1,6 @@
 services:
   # Kafka broker (giữ nguyên)
-  kafka1:
+  kafka:
     image: apache/kafka:4.0.0
     ports:
       - "9092:9092"
