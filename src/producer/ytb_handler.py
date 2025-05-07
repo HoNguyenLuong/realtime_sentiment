@@ -194,7 +194,7 @@ def extract_audio_stream(url, video_id):
                 audio_data = f.read()
 
             if len(audio_data) > 100:
-                send_audio_file(video_id, audio_data, f"chunk_{chunk_id}.wav")
+                send_audio_file(video_id, chunk_id, audio_data, f"chunk_{chunk_id}.wav")
                 chunk_id += 1
 
             os.remove(output_chunk)
@@ -245,7 +245,7 @@ def extract_livestream_audio(url, stream_id):
                     audio_data = f.read()
 
                 if len(audio_data) > 100:
-                    send_audio_file(stream_id, audio_data, f"chunk_{chunk_id}.wav")
+                    send_audio_file(stream_id, chunk_id, audio_data, f"chunk_{chunk_id}.wav")
 
                 os.remove(chunk_file)
                 chunk_id += 1

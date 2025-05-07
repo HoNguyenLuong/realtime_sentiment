@@ -47,7 +47,7 @@ def send_frame(video_id, frame_id, frame_bytes):
         "timestamp": timestamp
     })
 
-def send_audio_file(video_id, audio_data, ext="wav"):
+def send_audio_file(video_id,chunk_id, audio_data, ext="wav"):
     """Upload audio file to MinIO and send metadata to Kafka"""
     timestamp = datetime.utcnow().isoformat()
     object_name = f"{video_id}/audio.{ext}"
@@ -69,6 +69,7 @@ def send_audio_file(video_id, audio_data, ext="wav"):
     # Send metadata
     send_metadata("audio_stream", {
         "video_id": video_id,
+        "chunk_id": chunk_id,
         "type": "audio",
         "format": ext,
         "bucket_name": bucket_name,  # Thêm bucket_name vào metadata
