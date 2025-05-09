@@ -6,7 +6,7 @@ load_dotenv()
 
 CONFIG = {
     'kafka': {
-        'bootstrap_servers': os.getenv('KAFKA_SERVERS', 'localhost:9092'),
+        'bootstrap_servers': os.getenv('KAFKA_SERVERS', 'kafka1:9092,kafka2:9094,kafka3:9096'),
     },
     'video': {
         'width': int(os.getenv('VIDEO_WIDTH', 640)),

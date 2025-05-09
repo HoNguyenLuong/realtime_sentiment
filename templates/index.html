@@ -362,6 +362,79 @@
                 margin-top: 5px;
             }
         }
+        .audio-card {
+        margin-bottom: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        padding: 15px;
+        border-left: 5px solid #7c4dff; /* Màu khác với video để phân biệt */
+        animation: fadeIn 0.5s;
+        }
+
+        .audio-card.new {
+            border-left: 5px solid #e040fb;
+            background-color: #f3e5f5;
+        }
+
+        .audio-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .chunk-id {
+            font-weight: 700;
+            color: #7c4dff;
+        }
+
+        .audio-time {
+            font-size: 0.85rem;
+            color: #777;
+        }
+
+        .audio-text {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            font-style: italic;
+        }
+
+        /* Thêm màu cho các loại cảm xúc audio */
+        .sentiment-joy {
+            background-color: #4ade80;
+            color: white;
+        }
+
+        .sentiment-sadness {
+            background-color: #60a5fa;
+            color: white;
+        }
+
+        .sentiment-anger {
+            background-color: #f87171;
+            color: white;
+        }
+
+        .sentiment-fear {
+            background-color: #a78bfa;
+            color: white;
+        }
+
+        /* Hiển thị layout hai cột khi màn hình rộng */
+        @media (min-width: 992px) {
+            .results-container {
+                display: flex;
+                gap: 20px;
+            }
+
+            #video-frames-results,
+            #audio-results {
+                flex: 1;
+                min-width: 0; /* Giúp flex items không bị overflow */
+            }
+        }
     </style>
 </head>
 <body>
@@ -474,6 +547,18 @@
                 </div>
             </div>
 
+            <div class="results-container">
+                <!-- Video Frames Results Section -->
+                <div id="video-frames-results" class="mt-4">
+                    <!-- Nội dung hiện tại -->
+                </div>
+
+                <!-- Audio Results Section -->
+                <div id="audio-results" class="mt-4">
+                    <!-- Nội dung như trên đã thêm -->
+                </div>
+            </div>
+
             <!-- Video Frames Results Section -->
             <div id="video-frames-results" class="mt-4">
                 <div class="frames-header">
@@ -486,6 +571,21 @@
                         <i class="fas fa-film fa-2x mb-3 text-primary"></i>
                         <h4>No Frame Analysis Yet</h4>
                         <p>Frame analysis will appear here once processing begins</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="audio-results" class="mt-4">
+                <div class="frames-header">
+                    <h3>Audio Sentiment Analysis</h3>
+                    <p class="text-muted">Showing real-time audio analysis results</p>
+                </div>
+
+                <div class="frames-container" id="audioContainer">
+                    <div class="no-frames-message" id="noAudioMessage">
+                        <i class="fas fa-volume-up fa-2x mb-3 text-primary"></i>
+                        <h4>No Audio Analysis Yet</h4>
+                        <p>Audio analysis will appear here once processing begins</p>
                     </div>
                 </div>
             </div>
@@ -505,6 +605,7 @@
 
         // Track processed frames to avoid duplicates
         const processedFrames = new Set();
+        const processedAudioChunks = new Set();
         let lastFrameCount = 0;
 
         {% if result %}
@@ -762,22 +863,137 @@
                 .catch(error => console.error('Error updating sentiment data:', error));
         }
 
+        // Function để tạo một audio card
+        function createAudioCard(audio, isNew = false) {
+            // Tạo badges cho sentiment
+            let sentimentBadges = '';
+            if (audio.sentiment) {
+                for (const [sentiment, value] of Object.entries(audio.sentiment)) {
+                    if (value > 0) {
+                        const className = `sentiment-${sentiment.toLowerCase()}`;
+                        sentimentBadges += `<span class="emotion-badge ${className}">${sentiment}: ${value}</span>`;
+                    }
+                }
+            }
+
+            // Tạo badges cho emotion
+            let emotionBadges = '';
+            if (audio.emotion) {
+                for (const [emotion, value] of Object.entries(audio.emotion)) {
+                    if (value > 0) {
+                        // Sử dụng lại classes từ emotion video
+                        const emotionClass = mapEmotionToClass(emotion);
+                        emotionBadges += `<span class="emotion-badge ${emotionClass}">${emotion}: ${value}</span>`;
+                    }
+                }
+            }
+
+            return `
+                <div class="audio-card ${isNew ? 'new' : ''}" id="audio-${audio.chunk_id}">
+                    <div class="audio-header">
+                        <div class="chunk-id">Chunk #${audio.chunk_id}</div>
+                        <div class="audio-time">
+                            <i class="far fa-clock me-1"></i> Processed at: ${audio.processed_at}
+                        </div>
+                    </div>
+                    <div class="audio-text">"${audio.text}"</div>
+                    <div class="frame-details">
+                        <div class="emotions-badges">
+                            ${sentimentBadges}
+                            ${emotionBadges}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Mapping emotion names to CSS classes
+        function mapEmotionToClass(emotion) {
+            const map = {
+                'happy': 'happy',
+                'joy': 'happy',
+                'sad': 'sad',
+                'sadness': 'sad',
+                'angry': 'angry',
+                'anger': 'angry',
+                'surprise': 'surprise',
+                'fear': 'fear',
+                'neutral': 'neutral',
+                'disgust': 'disgusted'
+            };
+
+            return map[emotion.toLowerCase()] || 'neutral';
+        }
+
+        // Function to update audio results
+        function updateAudioResults() {
+            fetch('/api/get_audio_sentiments')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        // Hide the no audio message
+                        document.getElementById('noAudioMessage').style.display = 'none';
+
+                        // Check if we have new audio chunks
+                        const newAudioChunks = data.filter(chunk => !processedAudioChunks.has(chunk.chunk_id));
+
+                        if (newAudioChunks.length > 0) {
+                            // Update our set of processed chunks
+                            newAudioChunks.forEach(chunk => processedAudioChunks.add(chunk.chunk_id));
+
+                            // Sort newest first
+                            newAudioChunks.sort((a, b) => {
+                                return new Date(b.processed_at) - new Date(a.processed_at);
+                            });
+
+                            // Create HTML for new chunks
+                            let newAudioHTML = '';
+                            newAudioChunks.forEach(chunk => {
+                                newAudioHTML += createAudioCard(chunk, true);
+                            });
+
+                            // Insert at the beginning of the container
+                            const audioContainer = document.getElementById('audioContainer');
+                            if (audioContainer.innerHTML === document.getElementById('noAudioMessage').outerHTML) {
+                                audioContainer.innerHTML = newAudioHTML;
+                            } else {
+                                audioContainer.insertAdjacentHTML('afterbegin', newAudioHTML);
+                            }
+
+                            // After a second, remove the 'new' class
+                            setTimeout(() => {
+                                newAudioChunks.forEach(chunk => {
+                                    const audioElement = document.getElementById(`audio-${chunk.chunk_id}`);
+                                    if (audioElement) {
+                                        audioElement.classList.remove('new');
+                                    }
+                                });
+                            }, 1000);
+                        }
+                    }
+                })
+                .catch(error => console.error('Error updating audio results:', error));
+        }
         // Start polling for updates every 5 seconds
         document.addEventListener('DOMContentLoaded', function() {
             updateSentimentData(); // Initial update for comments
             updateVideoFrames();   // Initial update for video frames
+            updateAudioResults();  // Initial update for audio results
 
             updateInterval = setInterval(updateSentimentData, 5000);
             framesUpdateInterval = setInterval(updateVideoFrames, 3000); // Check for new frames every 3 seconds
+            audioUpdateInterval = setInterval(updateAudioResults, 3000); // Check for new audio every 3 seconds
 
-            // Make sure video frames section is visible
-            videoFramesResults.style.display = 'block';
+            // Make sure results sections are visible
+            document.getElementById('video-frames-results').style.display = 'block';
+            document.getElementById('audio-results').style.display = 'block';
         });
 
-        // Clean up when leaving the page
+        // Update cleanup event to include audio interval
         window.addEventListener('beforeunload', function() {
             clearInterval(updateInterval);
             clearInterval(framesUpdateInterval);
+            clearInterval(audioUpdateInterval);
         });
         {% endif %}
     </script>

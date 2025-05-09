@@ -1,47 +1,48 @@
 import datetime
 import json
 from typing import Any, Dict, List
-from src.consumer.common import logger
+from src.consumer.common import get_kafka_consumer, logger
 
-def get_audio_sentiment_results(topic_data: str) -> List[Dict[Any, Any]]:
+def get_audio_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
     """
     Lấy kết quả phân tích cảm xúc từ Kafka topic cho audio.
 
     Args:
-        topic_data (str): Dữ liệu từ Kafka topic dạng chuỗi JSON lines.
+        topic_name (str): Tên của Kafka topic.
 
     Returns:
         List[Dict[Any, Any]]: Danh sách kết quả phân tích cảm xúc âm thanh.
     """
-    json_lines = topic_data.strip().split('\n')
     results = []
+    try:
+        consumer = get_kafka_consumer(topic_name)
+        messages = consumer.poll(timeout_ms=5000, max_records=1000)
 
-    for line in json_lines:
-        try:
-            data = json.loads(line)
+        for topic_partition, partition_messages in messages.items():
+            for message in partition_messages:
+                try:
+                    data = message.value
 
-            # Chuyển đổi thời gian thành datetime object
-            processed_time = datetime.datetime.fromisoformat(data["processed_at"])
-            timestamp = datetime.datetime.fromisoformat(data["timestamp"])
+                    # Xử lý thời gian
+                    processed_time = datetime.fromisoformat(data.get("processed_at", datetime.now().isoformat()))
+                    timestamp = datetime.fromisoformat(data.get("timestamp", datetime.now().isoformat()))
 
-            # Format thời gian đẹp hơn
-            processed_time_str = processed_time.strftime("%Y-%m-%d %H:%M:%S")
-            timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                    # Đảm bảo data có tất cả các trường cần thiết
+                    result = {
+                        "chunk_id": data.get("chunk_id", ""),
+                        "video_id": data.get("video_id", ""),  # Thay đổi từ audio_id thành video_id để phù hợp với code mới
+                        "text": data.get("text", ""),
+                        "sentiment": data.get("sentiment", {}),
+                        "emotion": data.get("emotion", []),  # Changed from {} to [] to match JSON format
+                        "extracted_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "processed_at": processed_time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Lỗi xử lý message âm thanh từ Kafka: {str(e)}")
 
-            result = {
-                "chunk_id": data["chunk_id"],
-                "audio_id": data["audio_id"],
-                "text": data["text"],
-                "sentiment": data["sentiment"],
-                "emotion": data["emotion"],
-                "extracted_at": timestamp_str,
-                "processed_at": processed_time_str
-            }
-
-            results.append(result)
-        except json.JSONDecodeError:
-            logger.error(f"Lỗi khi parse JSON: {line}")
-        except Exception as e:
-            logger.error(f"Lỗi xử lý dữ liệu âm thanh: {str(e)}")
+        consumer.close()
+    except Exception as e:
+        logger.error(f"Lỗi đọc dữ liệu âm thanh từ Kafka: {str(e)}")
 
     return results

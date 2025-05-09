@@ -16,4 +16,4 @@ done
 
 # Sau khi format xong, chạy docker-compose lên với build
 echo "Building and starting Kafka cluster with docker-compose..."
-sudo docker-compose up --build
+sudo docker compose up --build    # Tùy phiên bản docker mà ta dùng lệnh khác nhau: sudo docker-compose up --build

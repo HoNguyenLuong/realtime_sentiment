@@ -60,11 +60,14 @@ from src.api.routes import router as api_router
 from src.producer.controller import process_url
 from src.consumer.spark_video import run as run_video_consumer
 from src.utils.image_utils import get_sentiment_results
+from src.utils.audio_utils import get_audio_sentiment_results
+from src.consumer.spark_audio import run as run_audio_consumer
 
 # Cache kết quả sentiment
 sentiment_results = {
     "comment_sentiment": {"positive": 0, "negative": 0, "neutral": 0},
-    "video_sentiment": []
+    "video_sentiment": [],
+    "audio_sentiment": []  # Thêm để cache kết quả audio
 }
 
 
@@ -75,6 +78,11 @@ async def lifespan(app: FastAPI):
     video_consumer_thread = threading.Thread(target=run_video_consumer, daemon=True)
     video_consumer_thread.start()
     print("✅ Video consumer started in background")
+
+    # Tạo và khởi động thread cho consumer xử lý audio
+    audio_consumer_thread = threading.Thread(target=run_audio_consumer, daemon=True)
+    audio_consumer_thread.start()
+    print("✅ Audio consumer started in background")
 
     # Cho consumer thời gian để khởi động hoàn toàn
     time.sleep(5)
@@ -211,6 +219,21 @@ async def get_video_sentiments():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/get_audio_sentiments")
+async def get_audio_sentiments():
+    """API endpoint để lấy kết quả phân tích cảm xúc từ audio"""
+    try:
+        # Lấy kết quả sentiment từ audio
+        results = get_audio_sentiment_results("audio_results")
+
+        # Cache kết quả
+        sentiment_results["audio_sentiment"] = results
+
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/video_emotions", response_class=HTMLResponse)
 async def video_emotions_page(request: Request):
     """Trang hiển thị phân tích cảm xúc từ frames video"""
@@ -240,6 +263,7 @@ async def status():
         "status": "running",
         "comments_analyzed": sum(sentiment_results["comment_sentiment"].values()),
         "video_frames_analyzed": len(sentiment_results["video_sentiment"]),
+        "audio_chunks_analyzed": len(sentiment_results["audio_sentiment"]),  # Thêm số lượng audio chunks
     }
 
 
