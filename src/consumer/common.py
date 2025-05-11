@@ -8,6 +8,7 @@ from src.producer.config import CONFIG  # <<< Thêm dòng này để dùng chung
 # Kafka topics
 VIDEO_TOPIC = 'video_frames'
 AUDIO_TOPIC = 'audio_stream'
+COMMENT_TOPIC = 'video_comments'
 PROCESSED_TOPIC = 'processed_frames'  # Topic để đánh dấu đã xử lý xong
 
 def get_kafka_consumer(topic: str):

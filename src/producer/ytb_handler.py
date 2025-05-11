@@ -1,3 +1,4 @@
+import json
 import subprocess
 import threading
 import time
@@ -9,7 +10,7 @@ import os
 from urllib.parse import urlparse, parse_qs
 from kafka import KafkaProducer
 from dotenv import load_dotenv
-from src.producer.kafka_sender import send_frame, send_audio_file
+from src.producer.kafka_sender import send_frame, send_audio_file, send_comments
 from src.producer.config import CONFIG
 
 load_dotenv()
@@ -260,6 +261,117 @@ def extract_livestream_audio(url, stream_id):
         logger.error(f"Error extracting livestream audio: {e}")
         logger.exception(e)
 
+def extract_youtube_comments(url, video_id):
+    """
+    Trích xuất comment từ một video YouTube
+
+    Args:
+        url (str): URL của video YouTube
+        video_id (str): ID của video YouTube
+    """
+    try:
+        logger.info(f"Extracting comments for YouTube video: {video_id}")
+
+        # Lấy cấu hình từ CONFIG
+        max_comments = CONFIG['comments']['max_comments']
+        sort_order = CONFIG['comments']['sort']
+
+        # Sử dụng yt-dlp để lấy comments
+        cmd = [
+            'yt-dlp',
+            '--write-comments',
+            '--no-download',
+            '--extractor-args', f'youtube:comment_sort={sort_order};max_comments={max_comments}',
+            '-O', 'comments',
+            '--dump-json',
+            url
+        ]
+
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+
+        # Phân tích kết quả JSON
+        comments_data = []
+        for line in result.stdout.strip().split('\n'):
+            if line:  # Đảm bảo line không trống
+                try:
+                    comment = json.loads(line)
+                    comments_data.append(comment)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse comment JSON: {line[:100]}...")
+
+        if not comments_data:
+            logger.warning(f"No comments extracted for video {video_id}")
+            return
+
+        logger.info(f"Extracted {len(comments_data)} comments for video {video_id}")
+
+        # Gửi comments sử dụng hàm send_comments
+        send_comments(video_id, comments_data)
+
+        logger.info(f"Successfully processed comments for YouTube video: {video_id}")
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with return code {e.returncode}: {e.stderr}")
+    except Exception as e:
+        logger.error(f"Error extracting YouTube comments: {e}")
+        logger.exception(e)
+
+def extract_livestream_comments(url, video_id):
+    """
+    Trích xuất comments từ một YouTube livestream
+
+    Args:
+        url (str): URL của YouTube livestream
+        video_id (str): ID của YouTube livestream
+    """
+    try:
+        logger.info(f"Extracting comments for YouTube livestream: {video_id}")
+
+        # Lấy cấu hình từ CONFIG
+        max_comments = CONFIG['comments']['max_comments']
+
+        # Đối với livestream, chúng ta sẽ sử dụng YouTube API hoặc yt-dlp với các tham số cụ thể cho livestream
+        # Ví dụ: sử dụng tham số --get-comments của yt-dlp với tùy chọn cho livestream
+        cmd = [
+            'yt-dlp',
+            '--write-comments',
+            '--no-download',
+            '--extractor-args',
+            f'youtube:comment_sort=new;max_comments={max_comments};live_chat=1',  # Chỉ định lấy live chat
+            '-O', 'comments',
+            '--dump-json',
+            url
+        ]
+
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+
+        # Phân tích kết quả JSON
+        comments_data = []
+        for line in result.stdout.strip().split('\n'):
+            if line:  # Đảm bảo line không trống
+                try:
+                    comment = json.loads(line)
+                    comments_data.append(comment)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse livestream comment JSON: {line[:100]}...")
+
+        if not comments_data:
+            logger.warning(f"No comments extracted for livestream {video_id}")
+            return
+
+        logger.info(f"Extracted {len(comments_data)} comments for livestream {video_id}")
+
+        # Gửi comments sử dụng hàm send_comments
+        send_comments(video_id, comments_data)
+
+        logger.info(f"Successfully processed comments for YouTube livestream: {video_id}")
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with return code {e.returncode}: {e.stderr}")
+    except Exception as e:
+        logger.error(f"Error extracting YouTube livestream comments: {e}")
+        logger.exception(e)
+
 def collect_youtube_urls_from_playlist(list_or_channel_url):
     try:
         cmd = ['yt-dlp', '--flat-playlist', '--get-id', '--get-title', list_or_channel_url]
@@ -303,6 +415,7 @@ def check_if_livestream(url):
 def process_ytb_url(url, video_id):
     """
     Xử lý một video YouTube đơn lẻ, phân biệt giữa video thường và livestream cho phần audio
+    Nay thêm chức năng lấy comments cho cả video thường và livestream
     """
     if video_id in processed_ids:
         logger.info(f"Skipping already processed video: {video_id}")
@@ -315,24 +428,38 @@ def process_ytb_url(url, video_id):
         # Luôn trích xuất video, bất kể là livestream hay video thường
         t1 = threading.Thread(target=stream_youtube_video_and_extract, args=(url, video_id))
         t1.start()
+
         # Chọn phương thức trích xuất audio phù hợp dựa trên loại nội dung
         if is_livestream:
             logger.info(f"Detected YouTube livestream: {video_id}, using livestream audio extraction")
             t2 = threading.Thread(target=extract_livestream_audio, args=(url, video_id))
+
+            # Thêm thread để lấy comments từ livestream
+            logger.info(f"Extracting comments for livestream: {video_id}")
+            t3 = threading.Thread(target=extract_livestream_comments, args=(url, video_id))
         else:
             logger.info(f"Detected regular YouTube video: {video_id}, using standard audio extraction")
             t2 = threading.Thread(target=extract_audio_stream, args=(url, video_id))
 
+            # Thêm thread để lấy comments từ video thường
+            logger.info(f"Extracting comments for video: {video_id}")
+            t3 = threading.Thread(target=extract_youtube_comments, args=(url, video_id))
+
         t2.start()
+        t3.start()
+
+        # Đợi tất cả các thread hoàn thành
         t1.join()
         t2.join()
+        t3.join()
 
         # Đánh dấu video đã được xử lý
         with open(PROCESSED_FILE, 'a') as f:
             f.write(video_id + "\n")
         processed_ids.add(video_id)
 
-        logger.info(f"Successfully processed YouTube video: {video_id}")
+        logger.info(f"Successfully processed YouTube video/livestream: {video_id}")
+
     except Exception as e:
         logger.error(f"Error processing YouTube video {video_id}: {e}")
         logger.exception(e)
