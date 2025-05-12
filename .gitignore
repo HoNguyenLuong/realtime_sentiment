@@ -33,6 +33,8 @@ venv.bak/
 # ===== VSCode (nếu có dùng) =====
 .vscode/
 
+src/llm/api_key.txt
+
 # ===== MacOS & hệ điều hành =====
 .DS_Store
 Thumbs.db

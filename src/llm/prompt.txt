@@ -1,0 +1,28 @@
+The system are doing sentiment analysis for youtube videos in 3 main ways: text, audio and frames.
+
+The text is the comment from youtube video, here is the result after sentiment analysis on comment:
+{text}
+
+The audio is the audio from youtube video, here is the result after sentiment analysis on audio:
+{audio}
+
+The frames are the frames from youtube video, here is the result after sentiment analysis on frames:
+{frames}
+
+Combine the results from text, audio and frames to get the final result.
+
+The final result should be a single sentiment score that represents the overall sentiment of the video.
+
+The sentiment score should be a float value between -1 and 1, where -1 indicates a negative sentiment, 0 indicates a neutral sentiment, and 1 indicates a positive sentiment.
+
+The sentiment label should be one of the following: positive, neutral, negative with confidence point.
+
+The result should contain your own brief description of sentiment analysis process and result. Decribe the results in an illustrative way with your own deep insight, including the number of frames, audio chunks and comments that have been analyzed.
+
+The final result should be in the following format:
+{
+    "sentiment_score": 0.5,
+    "sentiment_label": "positive",
+    "confidence": 0.95,
+    "description": "The video has a positive sentiment overall. There are 200 frames, 4 audio chunks and 100 comments has been analyzed. The emotion appears the most during the video is happy. The sentiment toward the video is also positive generally"
+}
