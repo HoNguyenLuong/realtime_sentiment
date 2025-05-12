@@ -55,7 +55,7 @@ def stream_youtube_video_and_extract(url, video_id):
              '-i', 'pipe:0',
              '-f', 'rawvideo',
              '-pix_fmt', 'bgr24',
-             '-vf', f'fps=2,scale={width}:{height}',
+             '-vf', f'fps=0.25,scale={width}:{height}',
              '-vsync', '0',
              'pipe:1'],
             stdin=process.stdout,
@@ -261,13 +261,17 @@ def extract_livestream_audio(url, stream_id):
         logger.error(f"Error extracting livestream audio: {e}")
         logger.exception(e)
 
+
 def extract_youtube_comments(url, video_id):
     """
-    Trích xuất comment từ một video YouTube
+    Trích xuất comment từ một video YouTube với đầy đủ thông tin
 
     Args:
         url (str): URL của video YouTube
         video_id (str): ID của video YouTube
+
+    Returns:
+        dict: Dictionary chứa thông tin video và danh sách comments
     """
     try:
         logger.info(f"Extracting comments for YouTube video: {video_id}")
@@ -289,32 +293,56 @@ def extract_youtube_comments(url, video_id):
 
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
-        # Phân tích kết quả JSON
-        comments_data = []
+        # Trích xuất toàn bộ thông tin comment
+        comments = []
         for line in result.stdout.strip().split('\n'):
             if line:  # Đảm bảo line không trống
                 try:
                     comment = json.loads(line)
-                    comments_data.append(comment)
+                    comment_obj = {
+                        "id": comment.get("id", f"unknown"),
+                        "text": comment.get("text", ""),
+                        "author": comment.get("author", "unknown"),
+                        "timestamp": comment.get("timestamp", None),
+                        "parent_id": comment.get("parent", "root"),
+                        "likes": comment.get("like_count", 0)
+                    }
+                    comments.append(comment_obj)
+
+                    # Xử lý các comment con (replies) nếu có
+                    if 'replies' in comment and comment['replies']:
+                        for reply in comment['replies']:
+                            reply_obj = {
+                                "id": reply.get("id", f"unknown"),
+                                "text": reply.get("text", ""),
+                                "author": reply.get("author", "unknown"),
+                                "timestamp": reply.get("timestamp", None),
+                                "parent_id": comment.get("id", "unknown"),  # Parent là ID của comment chính
+                                "likes": reply.get("like_count", 0)
+                            }
+                            comments.append(reply_obj)
                 except json.JSONDecodeError:
                     logger.warning(f"Failed to parse comment JSON: {line[:100]}...")
 
-        if not comments_data:
+        if not comments:
             logger.warning(f"No comments extracted for video {video_id}")
-            return
+            return {"video_id": video_id, "comments": []}
 
-        logger.info(f"Extracted {len(comments_data)} comments for video {video_id}")
+        logger.info(f"Extracted {len(comments)} comments for video {video_id}")
 
-        # Gửi comments sử dụng hàm send_comments
-        send_comments(video_id, comments_data)
-
-        logger.info(f"Successfully processed comments for YouTube video: {video_id}")
+        # Trả về dictionary chứa thông tin video và comments
+        return {
+            "video_id": video_id,
+            "comments": comments
+        }
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Command failed with return code {e.returncode}: {e.stderr}")
+        return {"video_id": video_id, "comments": []}
     except Exception as e:
         logger.error(f"Error extracting YouTube comments: {e}")
         logger.exception(e)
+        return {"video_id": video_id, "comments": []}
 
 def extract_livestream_comments(url, video_id):
     """

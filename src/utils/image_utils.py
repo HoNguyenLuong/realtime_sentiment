@@ -9,6 +9,7 @@ from src.video_sentiment.sentiment_analysis import analyze_emotions
 from src.producer.config import minio_client
 import numpy as np
 import json
+
 def get_frame_from_minio(bucket_name, object_name):
     """
     Lấy frame JPG từ MinIO và chuyển đổi thành numpy array
@@ -88,28 +89,47 @@ def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
                     except (ValueError, TypeError):
                         num_faces = 0
 
-                    # Xử lý emotions: chuyển từ mảng thành dict để phù hợp với giao diện
-                    emotions_list = data.get("emotions", [])
+                    # Xử lý emotions: đảm bảo đúng định dạng
+                    emotions = data.get("emotions", [])
                     emotions_dict = {}
-                    for emotion in emotions_list:
-                        emotions_dict[emotion] = 1  # Gán giá trị 1 cho mỗi cảm xúc có trong mảng
+
+                    # Nếu emotions là list, chuyển thành dict với giá trị
+                    if isinstance(emotions, list):
+                        for emotion in emotions:
+                            emotions_dict[emotion] = 1  # Gán giá trị 1 cho mỗi emotion được phát hiện
+                    # Nếu đã là dict, sử dụng trực tiếp
+                    elif isinstance(emotions, dict):
+                        emotions_dict = emotions
+
+                    # Đảm bảo tất cả các trường emotions đều có
+                    for emotion in ["happy", "sad", "angry", "surprise", "fear", "neutral", "disgust"]:
+                        if emotion not in emotions_dict:
+                            emotions_dict[emotion] = 0
 
                     result = {
                         "frame_id": data.get("frame_id", 0),
                         "video_id": data.get("video_id", ""),
                         "num_faces": num_faces,
-                        "emotions": emotions_dict,  # Trả về dict thay vì list
+                        "emotions": emotions_dict,
                         "extracted_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                         "processed_at": processed_time.strftime("%Y-%m-%d %H:%M:%S")
                     }
                     results.append(result)
+
+                    # Debug: In ra kết quả để kiểm tra
+                    print(f"Processed frame: {result['frame_id']} with emotions: {result['emotions']}")
+
                 except Exception as e:
                     logger.error(f"Lỗi xử lý message từ Kafka: {str(e)}")
+                    print(f"Error processing message: {str(e)}")
 
         consumer.close()
     except Exception as e:
         logger.error(f"Lỗi đọc dữ liệu sentiment từ Kafka: {str(e)}")
+        print(f"Error reading from Kafka: {str(e)}")
 
+    # Debug: In ra tổng số kết quả
+    print(f"Total frames processed: {len(results)}")
     return results
 
 # Phiên bản cài tiến --> đánh dấu các frame đã được xử lý bằng commit ở offset thay vì lưu ở topic mới.

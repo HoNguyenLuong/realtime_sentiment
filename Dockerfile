@@ -30,6 +30,7 @@ COPY requirement.txt .
 # Cài đặt các phụ thuộc Python
 RUN pip install --no-cache-dir -r requirement.txt
 
+COPY ./wav2vec2_checkpoints /app/wav2vec2_checkpoints
 # Copy toàn bộ project vào container
 COPY . .
 

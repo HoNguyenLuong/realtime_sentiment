@@ -722,6 +722,7 @@
         }
 
         // Helper function to create emotion badges
+        // This is the function that creates emotion badges in your UI
         function createEmotionBadges(emotions) {
             let badgesHTML = '';
 
@@ -749,30 +750,7 @@
             return badgesHTML;
         }
 
-        // Function to create a frame card
-        function createFrameCard(frame, isNew = false) {
-            return `
-                <div class="frame-card ${isNew ? 'new' : ''}" id="frame-${frame.frame_id}">
-                    <div class="frame-header">
-                        <div class="frame-id">Frame #${frame.frame_id}</div>
-                        <div class="frame-time">
-                            <i class="far fa-clock me-1"></i> Processed at: ${frame.processed_at}
-                        </div>
-                    </div>
-                    <div class="frame-details">
-                        <div class="frame-faces">
-                            <i class="fas fa-user faces-icon"></i>
-                            <span>${frame.num_faces} face${frame.num_faces !== 1 ? 's' : ''} detected</span>
-                        </div>
-                        <div class="emotions-badges">
-                            ${createEmotionBadges(frame.emotions)}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Function to update video frames results
+        // This is the function that updates the video frames in your UI
         function updateVideoFrames() {
             fetch('/api/get_video_sentiments')
                 .then(response => response.json())
@@ -819,6 +797,29 @@
                     }
                 })
                 .catch(error => console.error('Error updating video frames:', error));
+        }
+
+        // Function to create a frame card
+        function createFrameCard(frame, isNew = false) {
+            return `
+                <div class="frame-card ${isNew ? 'new' : ''}" id="frame-${frame.frame_id}">
+                    <div class="frame-header">
+                        <div class="frame-id">Frame #${frame.frame_id}</div>
+                        <div class="frame-time">
+                            <i class="far fa-clock me-1"></i> Processed at: ${frame.processed_at}
+                        </div>
+                    </div>
+                    <div class="frame-details">
+                        <div class="frame-faces">
+                            <i class="fas fa-user faces-icon"></i>
+                            <span>${frame.num_faces} face${frame.num_faces !== 1 ? 's' : ''} detected</span>
+                        </div>
+                        <div class="emotions-badges">
+                            ${createEmotionBadges(frame.emotions)}
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         // Add real-time update for comment sentiment

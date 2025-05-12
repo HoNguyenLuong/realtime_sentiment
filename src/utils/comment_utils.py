@@ -44,66 +44,70 @@ def get_comments_from_minio(bucket_name, object_name):
             response.close()
             response.release_conn()
 
-def process_comment(metadata_row):
+def process_comment(video_id, comments_data):
+    """
+    Xử lý dữ liệu comments và lưu vào MinIO
+
+    Args:
+        video_id (str): ID của video YouTube
+        comments_data (dict): Dictionary chứa thông tin video và danh sách comments
+    """
     try:
-        bucket_name = metadata_row["bucket_name"]
-        object_name = metadata_row["object_name"]
-        content_id = metadata_row.get("content_id", "unknown")
+        logger.info(f"Processing {len(comments_data['comments'])} comments for video {video_id}")
 
-        # Lấy toàn bộ dữ liệu từ MinIO
-        video_data = get_comments_from_minio(bucket_name, object_name)
+        # Ví dụ: Lưu toàn bộ JSON vào file
+        with open(f"{video_id}_comments.json", "w", encoding="utf-8") as f:
+            json.dump(comments_data, f, ensure_ascii=False, indent=2)
 
-        if video_data is not None and "comments" in video_data:
-            results = []
+        logger.info(f"Successfully saved comments to {video_id}_comments.json")
 
-            # Lặp qua tất cả comment trong file
-            for comment in video_data["comments"]:
-                if "text" in comment:
-                    comment_id = comment.get("id", "unknown")
-                    comment_text = comment.get("text", "")
-                    author = comment.get("author", "unknown")
-                    timestamp = comment.get("timestamp", 0)
+        # Lưu vào MinIO
+        try:
+            bucket_name = "comments"
+            object_name = f"{video_id}/comments.json"
 
-                    # Phát hiện ngôn ngữ
-                    language = language_detector.detect_language(comment_text)
+            # Đảm bảo bucket tồn tại
+            if not minio_client.bucket_exists(bucket_name):
+                minio_client.make_bucket(bucket_name)
+                logger.info(f"Created new bucket: {bucket_name}")
 
-                    # Phân tích cảm xúc văn bản
-                    sentiment_result = sentiment_analyzer.analyze(comment_text)
+            # Chuyển đổi JSON thành bytes
+            json_data = json.dumps(comments_data, ensure_ascii=False).encode('utf-8')
+            from io import BytesIO
+            data_stream = BytesIO(json_data)
 
-                    # Phân tích emoji
-                    emoji_result = emoji_analyzer.analyze(comment_text)
+            # Lưu vào MinIO
+            minio_client.put_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                data=data_stream,
+                length=len(json_data),
+                content_type="application/json"
+            )
 
-                    # Kết hợp kết quả
-                    result = {
-                        "comment_id": comment_id,
-                        "content_id": content_id,
-                        "author": author,
-                        "timestamp": timestamp,
-                        "language": language,
-                        "sentiment": sentiment_result["sentiment"],
-                        "confidence": sentiment_result["confidence"],
-                        "emoji_sentiment": emoji_result["emoji_sentiment"],
-                        "emoji_score": emoji_result["emoji_score"],
-                        "emojis_found": emoji_result["emojis_found"]
-                    }
+            logger.info(f"Successfully uploaded comments to MinIO: {bucket_name}/{object_name}")
 
-                    results.append(result)
+            # Gửi thông báo tới Kafka rằng có comment mới
+            notification = {
+                "content_id": video_id,
+                "bucket_name": bucket_name,
+                "object_name": object_name,
+                "timestamp": datetime.now().isoformat()
+            }
 
-            # Trả về kết quả của comment được chỉ định trong metadata
-            # Hoặc kết quả đầu tiên nếu không có comment_id cụ thể
-            target_comment_id = metadata_row.get("comment_id")
-            if target_comment_id:
-                for result in results:
-                    if result["comment_id"] == target_comment_id:
-                        return result
+            # Gửi thông báo tới Kafka
+            from src.producer.kafka_sender import producer
+            producer.send("comments", value=notification)
+            producer.flush()
 
-            # Nếu không tìm thấy comment cụ thể hoặc không có comment_id, trả về kết quả mặc định
-            return results[0] if results else get_default_result()
-        else:
-            return get_default_result()
+            logger.info(f"Sent notification to Kafka for {video_id}")
+
+        except Exception as e:
+            logger.error(f"Error saving to MinIO or sending to Kafka: {e}")
+
     except Exception as e:
-        logger.error(f"Lỗi khi xử lý comment: {str(e)}")
-        return get_default_result()
+        logger.error(f"Error processing comments: {e}")
+        logger.exception(e)
 
 def get_default_result():
     return {
