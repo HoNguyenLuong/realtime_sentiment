@@ -37,4 +37,12 @@ def get_audio_results():
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-# Không cần if __name__ == "__main__" ở đây, vì file này chỉ định nghĩa API
+
+
+@app.route("/comment", methods=["GET"])
+def get_comment_results():
+    try:
+        results = get_comment_results("audio_results")
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

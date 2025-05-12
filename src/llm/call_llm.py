@@ -30,10 +30,10 @@ def use_llm_for_sentiment(
 
     # 1. Tạo prompt từ template
     filled_prompt = prompt_template.format(
-        text=text_result,
+        # text=text_result,
         audio=audio_result,
         frames=frame_result,
-        num_comments=num_comments,
+        # num_comments=num_comments,
         num_audio_chunks=num_audio_chunks,
         num_frames=num_frames
     )
