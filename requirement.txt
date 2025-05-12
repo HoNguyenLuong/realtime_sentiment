@@ -28,6 +28,10 @@ python-multipart
 jinja2==3.1.2
 scipy
 speechbrain
+emoji
+langdetect
+sentencepiece==0.1.97
+protobuf==3.19.4
 huggingface_hub[hf_xet]
 openai
 python-dotenv

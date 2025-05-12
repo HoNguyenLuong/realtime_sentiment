@@ -77,6 +77,46 @@ def send_audio_file(video_id,chunk_id, audio_data, ext="wav"):
         "timestamp": timestamp
     })
 
+def send_comments(video_id, comments_data):
+    """
+    Upload comments data to MinIO and send metadata to Kafka
+
+    Args:
+        video_id (str): ID của video YouTube
+        comments_data (list): Danh sách các comments đã được parse
+    """
+    timestamp = datetime.utcnow().isoformat()
+    object_name = f"{video_id}/comments.json"
+
+    # Sử dụng bucket_name từ CONFIG
+    bucket_name = CONFIG['comments']['comments_bucket']
+
+    # Chuyển comments thành định dạng JSON để lưu trữ
+    comments_json = json.dumps(comments_data, ensure_ascii=False)
+    comments_bytes = comments_json.encode('utf-8')
+
+    # Tạo stream từ bytes
+    comments_stream = io.BytesIO(comments_bytes)
+
+    # Upload to MinIO
+    minio_client.put_object(
+        bucket_name=bucket_name,
+        object_name=object_name,
+        data=comments_stream,
+        length=len(comments_bytes),
+        content_type="application/json"
+    )
+
+    # Gửi metadata
+    send_metadata("video_comments", {
+        "video_id": video_id,
+        "type": "comments",
+        "comment_count": len(comments_data),
+        "bucket_name": bucket_name,
+        "object_name": object_name,
+        "timestamp": timestamp
+    })
+
 def close_producer():
     producer.flush()
     producer.close()
