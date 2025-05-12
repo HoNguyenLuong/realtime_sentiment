@@ -155,3 +155,19 @@ def process_and_save_fusion_results_to_minio(client, bucket_name, object_name):
         length=len(json_data),
         content_type="application/json"
     )
+
+def load_sentiment_result_from_minio(client, bucket_name: str, object_name: str) -> dict:
+    """
+    Tải kết quả sentiment đã lưu từ MinIO.
+
+    Args:
+        client: Đối tượng MinIO client đã kết nối.
+        bucket_name (str): Tên bucket trong MinIO.
+        object_name (str): Đường dẫn/tên file cần đọc.
+
+    Returns:
+        dict: Dữ liệu sentiment đã được load.
+    """
+    response = client.get_object(bucket_name, object_name)
+    json_bytes = response.read()
+    return json.loads(json_bytes.decode("utf-8"))

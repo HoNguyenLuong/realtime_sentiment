@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 # from src.consumer.controller import get_sentiment_results  # Import từ consumer
 from src.producer.controller import process_url  # Import từ producer
-from src.utils.image_utils import get_sentiment_results
+from src.utils.image_utils import get_frame_sentiment_results
 from src.utils.audio_utils import get_audio_sentiment_results
+from src.consumer.fusion import generate_final_sentiment_result
 
 app = Flask(__name__)
 app.secret_key = "dm"
@@ -25,7 +26,7 @@ def index():
 @app.route("/get_results", methods=["GET"])
 def get_results():
     try:
-        results = get_sentiment_results("emotion_results")
+        results = get_frame_sentiment_results("emotion_results")
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -43,6 +44,14 @@ def get_audio_results():
 def get_comment_results():
     try:
         results = get_comment_results("audio_results")
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/final", methods=["GET"])
+def get_final_results():
+    try:
+        results = generate_final_sentiment_result()
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -56,7 +56,6 @@ def root():
     return {"message": "Kafka Video-Audio Streaming API"}
 
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -68,7 +67,7 @@ import os
 from src.api.routes import router as api_router
 from src.producer.controller import process_url
 from src.consumer.spark_video import run as run_video_consumer
-from src.utils.image_utils import get_sentiment_results as get_video_sentiment_results  # Đổi tên để tránh nhầm lẫn
+from src.utils.image_utils import get_frame_sentiment_results as get_video_sentiment_results  # Đổi tên để tránh nhầm lẫn
 from src.utils.audio_utils import get_audio_sentiment_results
 from src.consumer.spark_audio import run as run_audio_consumer
 

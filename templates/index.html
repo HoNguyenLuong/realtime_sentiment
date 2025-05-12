@@ -459,6 +459,74 @@
             color: white;
         }
 
+        /* Styles for fusion section */
+        .fusion-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            background-color: #fff;
+            padding: 20px;
+        }
+
+        .border-left-primary {
+            border-left: 5px solid var(--primary-color);
+        }
+
+        .fusion-summary {
+            margin-top: 20px;
+        }
+
+        /* Radar chart container */
+        .fusion-chart-container {
+            margin: 20px auto;
+            max-width: 100%;
+        }
+
+        /* Timeline visualization */
+        .fusion-timeline {
+            position: relative;
+            margin: 30px 0;
+            padding: 20px 0;
+        }
+
+        .fusion-timeline:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            height: 100%;
+            width: 4px;
+            background: var(--primary-color);
+            opacity: 0.3;
+        }
+
+        .fusion-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            position: relative;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .fusion-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .fusion-time {
+            display: inline-block;
+            padding: 5px 10px;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
         /* Hiển thị layout hai cột khi màn hình rộng */
         @media (min-width: 992px) {
             .results-container {
@@ -602,6 +670,11 @@
                 <div id="audio-results" class="mt-4">
                     <!-- Nội dung như trên đã thêm -->
                 </div>
+
+                <!-- Final Results Section -->
+                <div id="final-results" class="mt-4">
+                    <!-- Nội dung như trên đã thêm -->
+                </div>
             </div>
 
             <!-- Video Frames Results Section -->
@@ -631,6 +704,35 @@
                         <i class="fas fa-volume-up fa-2x mb-3 text-primary"></i>
                         <h4>No Audio Analysis Yet</h4>
                         <p>Audio analysis will appear here once processing begins</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="fusion-results" class="mt-4">
+                <div class="frames-header">
+                    <h3>Fusion Analysis Results</h3>
+                    <p class="text-muted">Combined analysis from comments, video, and audio</p>
+                </div>
+
+                <div class="fusion-container" id="fusionContainer">
+                    <div class="no-frames-message" id="noFusionMessage">
+                        <i class="fas fa-layer-group fa-2x mb-3 text-primary"></i>
+                        <h4>No Fusion Analysis Yet</h4>
+                        <p>Combined analysis will appear here once processing is complete</p>
+                    </div>
+
+                    <!-- Fusion summary card -->
+                    <div id="fusionSummaryCard" style="display: none;" class="mb-4 p-4 border-left-primary rounded shadow-sm">
+                        <h4 class="mb-3">Overall Sentiment</h4>
+                        <div class="fusion-chart-container" style="height: 300px;">
+                            <canvas id="fusionChart"></canvas>
+                        </div>
+                        <div class="fusion-summary mt-3">
+                            <div class="alert alert-primary" role="alert">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <span id="fusionConclusion">Analysis in progress...</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1046,6 +1148,112 @@
             clearInterval(audioUpdateInterval);
         });
         {% endif %}
+
+        // Function to update fusion results
+        function updateFusionResults() {
+            fetch('/api/final')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data && Object.keys(data).length > 0) {
+                            // Hide the no fusion message
+                            document.getElementById('noFusionMessage').style.display = 'none';
+
+                            // Show the fusion summary card
+                            const summaryCard = document.getElementById('fusionSummaryCard');
+                            summaryCard.style.display = 'block';
+
+                            // Update the fusion conclusion
+                            if (data.conclusion) {
+                                document.getElementById('fusionConclusion').textContent = data.conclusion;
+                            }
+
+                            // Update or create fusion chart
+                            updateFusionChart(data);
+                        }
+                    })
+                    .catch(error => console.error('Error updating fusion results:', error));
+        }
+
+        // Function to create/update the fusion chart
+        function updateFusionChart(data) {
+            const ctx = document.getElementById('fusionChart').getContext('2d');
+
+            // If chart exists, destroy it before recreating
+            if (window.fusionChart) {
+                window.fusionChart.destroy();
+            }
+
+            // Extract data for the chart
+            const labels = Object.keys(data.emotions || {});
+            const values = Object.values(data.emotions || {});
+
+            // Create radar chart
+            window.fusionChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Combined Sentiment Analysis',
+                        data: values,
+                        backgroundColor: 'rgba(67, 97, 238, 0.2)',
+                        borderColor: 'rgba(67, 97, 238, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(67, 97, 238, 1)',
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 0.2
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.r !== null) {
+                                        label += (context.parsed.r * 100).toFixed(1) + '%';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Add the fusion update to the existing interval setup
+        {%
+            if youtube_url %
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            // Add this line to your existing DOMContentLoaded function
+            updateFusionResults(); // Initial update for fusion results
+
+            // Add this line to your existing intervals
+            fusionUpdateInterval = setInterval(updateFusionResults, 5000); // Check for fusion updates every 5 seconds
+
+            // Add this to your existing beforeunload event listener
+            window.addEventListener('beforeunload', function () {
+                // Add this line to the existing clearInterval calls
+                clearInterval(fusionUpdateInterval);
+            });
+        });
+        {%
+            endif %
+        }
     </script>
 </body>
 </html>
