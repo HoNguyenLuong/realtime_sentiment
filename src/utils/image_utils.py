@@ -66,7 +66,7 @@ def process_frame(metadata_row):
         logger.error(f"Lỗi khi xử lý frame: {str(e)}")
         return {"num_faces": 0, "emotions": []}
 
-def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
+def get_frame_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
     results = []
     try:
         consumer = get_kafka_consumer(topic_name)

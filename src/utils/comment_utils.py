@@ -115,7 +115,7 @@ def get_default_result():
         "emojis_found": []
     }
 
-def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
+def get_comment_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
     results = []
     try:
         consumer = get_kafka_consumer(topic_name)
