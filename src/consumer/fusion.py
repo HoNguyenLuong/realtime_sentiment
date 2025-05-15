@@ -109,11 +109,11 @@ def aggregate_comment_sentiment(comment_results: List[Dict]) -> Dict[str, Dict]:
 
     return content_final_stats
 
-def get_overall_video_sentiments(topic_name: str) -> dict[str, dict]:
+def get_overall_video_sentiments(topic_name: str) -> Dict[str, dict]:
     frame_results = get_frame_sentiment_results(topic_name)
     return aggregate_sentiment_from_frames(frame_results)
 
-def get_overall_audio_sentiments(topic_data: str) -> dict[str, dict]:
+def get_overall_audio_sentiments(topic_data: str) -> Dict[str, dict]:
     audio_results = get_audio_sentiment_results(topic_data)
     return aggregate_sentiment_from_audio(audio_results)
 
@@ -137,7 +137,7 @@ def generate_final_sentiment_result():
     num_chunks = sum(item.get("num_chunks", 0) for item in audio_res.values())
 
     # Gọi LLM để tổng hợp kết quả cuối cùng
-    final_result = use_llm_for_sentiment(cmt_res,frame_res, audio_res, num_cmt, num_frames, num_chunks)
+    final_result = use_llm_for_sentiment(audio_res, frame_res, num_frames,num_chunks)
 
     return final_result
 

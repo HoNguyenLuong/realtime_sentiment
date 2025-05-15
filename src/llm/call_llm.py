@@ -13,10 +13,10 @@ def call_llm_api(prompt):
     return call_gpt4o(prompt, api_key, system_prompt)
 
 def use_llm_for_sentiment(
-                                    text_result: dict,
+                                    # text_result: dict,
                                     audio_result: dict,
                                     frame_result: dict,
-                                    num_comments: int,
+                                    # num_comments: int,
                                     num_audio_chunks: int,
                                     num_frames: int
                                     ):
