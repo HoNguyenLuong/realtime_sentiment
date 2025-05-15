@@ -22,7 +22,7 @@ def index():
         return redirect(url_for("index"))
     return render_template("index.html")
 
-@app.route("/get_results", methods=["GET"])
+@app.route("/get_video_sentiments", methods=["GET"])
 def get_results():
     try:
         results = get_sentiment_results("emotion_results")

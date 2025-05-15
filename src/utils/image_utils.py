@@ -67,7 +67,10 @@ def process_frame(metadata_row):
         logger.error(f"Lỗi khi xử lý frame: {str(e)}")
         return {"num_faces": 0, "emotions": []}
 
-def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
+def get_sentiment_results(topic_name: str) -> list:
+    """
+    Đọc và xử lý dữ liệu cảm xúc từ Kafka topic
+    """
     results = []
     try:
         consumer = get_kafka_consumer(topic_name)
@@ -78,58 +81,58 @@ def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
                 try:
                     data = message.value
 
-                    # Xử lý thời gian
-                    processed_time = datetime.fromisoformat(data.get("processed_at", datetime.now().isoformat()))
-                    timestamp = datetime.fromisoformat(data.get("timestamp", datetime.now().isoformat()))
+                    # Log dữ liệu gốc để debug
+                    logger.debug(f"Raw data from Kafka: {data}")
 
-                    # Xử lý num_faces để đảm bảo là số nguyên
-                    num_faces = data.get("num_faces", 0)
-                    try:
-                        num_faces = int(num_faces)  # Chuyển đổi thành số nếu là chuỗi
-                    except (ValueError, TypeError):
-                        num_faces = 0
+                    # Xử lý frame_id để đảm bảo là string
+                    frame_id = str(data.get("frame_id", "0"))
 
-                    # Xử lý emotions: đảm bảo đúng định dạng
+                    # Xử lý emotions để đảm bảo định dạng đúng
                     emotions = data.get("emotions", [])
-                    emotions_dict = {}
 
-                    # Nếu emotions là list, chuyển thành dict với giá trị
+                    # Chuyển emotions array thành object nếu cần
+                    emotions_dict = {}
                     if isinstance(emotions, list):
                         for emotion in emotions:
-                            emotions_dict[emotion] = 1  # Gán giá trị 1 cho mỗi emotion được phát hiện
-                    # Nếu đã là dict, sử dụng trực tiếp
+                            emotions_dict[emotion] = 1
                     elif isinstance(emotions, dict):
                         emotions_dict = emotions
 
-                    # Đảm bảo tất cả các trường emotions đều có
+                    # Đảm bảo tất cả các loại cảm xúc đều có trong dict
                     for emotion in ["happy", "sad", "angry", "surprise", "fear", "neutral", "disgust"]:
                         if emotion not in emotions_dict:
                             emotions_dict[emotion] = 0
 
-                    result = {
-                        "frame_id": data.get("frame_id", 0),
-                        "video_id": data.get("video_id", ""),
-                        "num_faces": num_faces,
-                        "emotions": emotions_dict,
-                        "extracted_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                        "processed_at": processed_time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    results.append(result)
+                    # Định dạng lại thời gian để dễ đọc
+                    processed_at = data.get("processed_at")
+                    if processed_at:
+                        try:
+                            dt = datetime.fromisoformat(processed_at.replace('Z', '+00:00'))
+                            processed_at = dt.strftime("%Y-%m-%d %H:%M:%S")
+                        except (ValueError, TypeError):
+                            processed_at = str(processed_at)
 
-                    # Debug: In ra kết quả để kiểm tra
-                    print(f"Processed frame: {result['frame_id']} with emotions: {result['emotions']}")
+                    # Tạo object kết quả theo định dạng chuẩn
+                    result = {
+                        "frame_id": frame_id,
+                        "video_id": data.get("video_id", ""),
+                        "num_faces": int(data.get("num_faces", 0)),
+                        "emotions": emotions_dict,
+                        "processed_at": processed_at
+                    }
+
+                    results.append(result)
+                    logger.info(f"Processed frame {frame_id} with {len(emotions_dict)} emotions")
 
                 except Exception as e:
-                    logger.error(f"Lỗi xử lý message từ Kafka: {str(e)}")
-                    print(f"Error processing message: {str(e)}")
+                    logger.error(f"Error processing Kafka message: {str(e)}")
 
         consumer.close()
-    except Exception as e:
-        logger.error(f"Lỗi đọc dữ liệu sentiment từ Kafka: {str(e)}")
-        print(f"Error reading from Kafka: {str(e)}")
+        logger.info(f"Total frames processed: {len(results)}")
 
-    # Debug: In ra tổng số kết quả
-    print(f"Total frames processed: {len(results)}")
+    except Exception as e:
+        logger.error(f"Error reading sentiment data from Kafka: {str(e)}")
+
     return results
 
 # Phiên bản cài tiến --> đánh dấu các frame đã được xử lý bằng commit ở offset thay vì lưu ở topic mới.

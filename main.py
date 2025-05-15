@@ -209,7 +209,7 @@ async def get_results():
 @app.get("/api/get_video_sentiments")
 async def get_video_sentiments():
     try:
-        results = get_video_sentiment_results("video_frames")
+        results = get_video_sentiment_results("emotion_results")
 
         # Explicitly convert results to JSON-serializable format
         json_safe_results = []
@@ -249,7 +249,7 @@ async def video_emotions_page(request: Request):
     try:
         # Lấy kết quả từ cache hoặc gọi lại hàm
         if not sentiment_results["video_sentiment"]:
-            results = get_video_sentiment_results("video_frames")
+            results = get_video_sentiment_results("emotion_results")
             sentiment_results["video_sentiment"] = results
         else:
             results = sentiment_results["video_sentiment"]
