@@ -79,41 +79,38 @@ def send_audio_file(video_id,chunk_id, audio_data, ext="wav"):
 
 def send_comments(video_id, comments_data):
     """
-    Upload comments data to MinIO and send metadata to Kafka
+    Upload each comment as a separate file to MinIO and send metadata to Kafka
 
     Args:
         video_id (str): ID của video YouTube
         comments_data (list): Danh sách các comments đã được parse
     """
     timestamp = datetime.utcnow().isoformat()
-    object_name = f"{video_id}/comments.json"
-
     # Sử dụng bucket_name từ CONFIG
     bucket_name = CONFIG['comments']['comments_bucket']
+    object_prefix = f"{video_id}/comments/"
 
-    # Chuyển comments thành định dạng JSON để lưu trữ
-    comments_json = json.dumps(comments_data, ensure_ascii=False)
-    comments_bytes = comments_json.encode('utf-8')
+    # Lưu từng comment thành file riêng
+    for idx, comment in enumerate(comments_data):
+        comment_json = json.dumps(comment, ensure_ascii=False)
+        comment_bytes = comment_json.encode('utf-8')
+        comment_stream = io.BytesIO(comment_bytes)
+        object_name = f"{object_prefix}comment_{idx}.json"
+        minio_client.put_object(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=comment_stream,
+            length=len(comment_bytes),
+            content_type="application/json"
+        )
 
-    # Tạo stream từ bytes
-    comments_stream = io.BytesIO(comments_bytes)
-
-    # Upload to MinIO
-    minio_client.put_object(
-        bucket_name=bucket_name,
-        object_name=object_name,
-        data=comments_stream,
-        length=len(comments_bytes),
-        content_type="application/json"
-    )
-
-    # Gửi metadata
+    # Gửi metadata duy nhất lên Kafka
     send_metadata("video_comments", {
         "video_id": video_id,
         "type": "comments",
         "comment_count": len(comments_data),
         "bucket_name": bucket_name,
-        "object_name": object_name,
+        "object_prefix": object_prefix,
         "timestamp": timestamp
     })
 
