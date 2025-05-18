@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 from typing import Any, Dict, List
+import traceback
 
 from src.comment_sentiment.comment_extraction import CommentExtractor
 from src.consumer.common import get_kafka_consumer, logger
@@ -17,27 +18,26 @@ comment_extractor = CommentExtractor()
 
 def get_comments_from_minio(bucket_name, object_name):
     """
-    Lấy comments JSON từ MinIO
+    Lấy comment JSON từ MinIO
 
     Args:
         bucket_name (str): Tên bucket
         object_name (str): Tên object
 
     Returns:
-        dict: Toàn bộ dữ liệu từ file JSON hoặc None nếu có lỗi
+        dict: Dữ liệu comment từ file JSON hoặc None nếu có lỗi
     """
     try:
-        # Lấy đối tượng từ MinIO
+        logger.info(f"[get_comments_from_minio] Getting comment from {bucket_name}/{object_name}")
         response = minio_client.get_object(bucket_name, object_name)
-
-        # Đọc dữ liệu JSON
-        json_data = json.loads(response.read().decode('utf-8'))
-
-        logger.info(f"Đã lấy dữ liệu JSON từ MinIO: {object_name}")
-        return json_data
-
+        comment_data = json.loads(response.read().decode('utf-8'))
+        logger.info(f"[get_comments_from_minio] Successfully got comment data from {object_name}")
+        
+        # Trả về trực tiếp object comment - không wrap thêm
+        return comment_data
     except Exception as e:
-        logger.error(f"Lỗi khi lấy dữ liệu từ MinIO: {str(e)}")
+        logger.error(f"[get_comments_from_minio] Error getting data from MinIO: {str(e)}")
+        logger.error(traceback.format_exc())
         return None
     finally:
         if 'response' in locals():
@@ -53,61 +53,62 @@ def process_comment(video_id, comments_data):
         comments_data (dict): Dictionary chứa thông tin video và danh sách comments
     """
     try:
-        logger.info(f"Processing {len(comments_data['comments'])} comments for video {video_id}")
-
-        # Ví dụ: Lưu toàn bộ JSON vào file
-        with open(f"{video_id}_comments.json", "w", encoding="utf-8") as f:
-            json.dump(comments_data, f, ensure_ascii=False, indent=2)
-
-        logger.info(f"Successfully saved comments to {video_id}_comments.json")
-
-        # Lưu vào MinIO
-        try:
-            bucket_name = "comments"
-            object_name = f"{video_id}/comments.json"
-
-            # Đảm bảo bucket tồn tại
-            if not minio_client.bucket_exists(bucket_name):
-                minio_client.make_bucket(bucket_name)
-                logger.info(f"Created new bucket: {bucket_name}")
-
-            # Chuyển đổi JSON thành bytes
-            json_data = json.dumps(comments_data, ensure_ascii=False).encode('utf-8')
-            from io import BytesIO
-            data_stream = BytesIO(json_data)
-
-            # Lưu vào MinIO
-            minio_client.put_object(
-                bucket_name=bucket_name,
-                object_name=object_name,
-                data=data_stream,
-                length=len(json_data),
-                content_type="application/json"
-            )
-
-            logger.info(f"Successfully uploaded comments to MinIO: {bucket_name}/{object_name}")
-
-            # Gửi thông báo tới Kafka rằng có comment mới
-            notification = {
-                "content_id": video_id,
-                "bucket_name": bucket_name,
-                "object_name": object_name,
-                "timestamp": datetime.now().isoformat()
-            }
-
-            # Gửi thông báo tới Kafka
-            from src.producer.kafka_sender import producer
-            producer.send("comments", value=notification)
-            producer.flush()
-
-            logger.info(f"Sent notification to Kafka for {video_id}")
-
-        except Exception as e:
-            logger.error(f"Error saving to MinIO or sending to Kafka: {e}")
-
+        logger.info(f"[process_comment] Processing comments for video {video_id}")
+        
+        # Xử lý từng comment riêng lẻ
+        if isinstance(comments_data, list):
+            logger.info(f"[process_comment] Processing {len(comments_data)} comments")
+            for comment in comments_data:
+                # Phân tích sentiment và thông tin khác cho từng comment
+                process_single_comment(video_id, comment)
+        elif isinstance(comments_data, dict) and "comments" in comments_data:
+            comments = comments_data.get("comments", [])
+            logger.info(f"[process_comment] Processing {len(comments)} comments from comments dictionary")
+            for comment in comments:
+                process_single_comment(video_id, comment)
+        else:
+            logger.warning(f"[process_comment] Unsupported comments data format")
+            
     except Exception as e:
-        logger.error(f"Error processing comments: {e}")
-        logger.exception(e)
+        logger.error(f"[process_comment] Error processing comments: {e}")
+        logger.error(traceback.format_exc())
+
+def process_single_comment(video_id, comment):
+    """Process a single comment"""
+    try:
+        if not comment or "text" not in comment:
+            return
+            
+        # Phân tích ngôn ngữ
+        text = comment.get("text", "")
+        language = language_detector.detect_language(text)
+        
+        # Phân tích sentiment
+        sentiment = sentiment_analyzer.analyze(text)
+        
+        # Phân tích emoji
+        emoji_analysis = emoji_analyzer.analyze(text)
+        
+        # Tạo kết quả
+        result = {
+            "comment_id": comment.get("id", "unknown"),
+            "content_id": video_id,
+            "text": text,
+            "author": comment.get("author", "unknown"),
+            "timestamp": comment.get("timestamp", ""),
+            "language": language,
+            "sentiment": sentiment.get("sentiment", "neutral"),
+            "confidence": sentiment.get("confidence", {}),
+            "emoji_sentiment": emoji_analysis.get("emoji_sentiment", "neutral"),
+            "emoji_score": emoji_analysis.get("emoji_score", 0.0),
+            "emojis_found": emoji_analysis.get("emojis_found", []),
+            "processed_at": datetime.now().isoformat()
+        }
+        
+        # TODO: Lưu kết quả vào MinIO hoặc gửi đến Kafka
+        
+    except Exception as e:
+        logger.error(f"Error processing single comment: {e}")
 
 def get_default_result():
     return {

@@ -1,28 +1,32 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import StructType, StringType, IntegerType, StructField, MapType, FloatType
-from src.utils.comment_utils import get_comments_from_minio, comment_extractor, process_comment
+from src.utils.comment_utils import get_comments_from_minio, comment_extractor
+from src.comment_sentiment.sentiment_analysis import SentimentAnalyzer
+from src.comment_sentiment.emoji_analysis import EmojiAnalyzer
+from src.comment_sentiment.language_detection import LanguageDetector
 from .common import logger, COMMENT_TOPIC
 from src.producer.config import CONFIG, minio_client
 from datetime import datetime
 import json
 from src.producer.kafka_sender import producer
 
+# Khởi tạo các analyzer
+sentiment_analyzer = SentimentAnalyzer()
+emoji_analyzer = EmojiAnalyzer()
+language_detector = LanguageDetector()
+
 
 def run():
     try:
-        # Định nghĩa tên topic cho kết quả xử lý sentiment
+        logger.info("[spark_comment] >>>>>>>>>>>> run() called, starting comment consumer <<<<<<<<<<<<")
         sentiment_results_topic = "comment_sentiment_results"
-
-        # Cấu hình bucket MinIO để lưu kết quả sentiment
         sentiment_results_bucket = "comment-sentiment-results"
 
-        # Đảm bảo bucket tồn tại
         if not minio_client.bucket_exists(sentiment_results_bucket):
             minio_client.make_bucket(sentiment_results_bucket)
             logger.info(f"Created new bucket: {sentiment_results_bucket}")
 
-        # Khởi tạo Spark session kết nối với Spark master bên ngoài
         spark = SparkSession.builder \
             .appName("CommentProcessor") \
             .master("spark://spark-master:7077") \
@@ -35,138 +39,141 @@ def run():
 
         spark.sparkContext.setLogLevel("WARN")
 
-        # Schema dữ liệu Kafka gửi tới - Đây là metadata từ MinIO
+        # Loại bỏ checkpoint cũ để đảm bảo đọc lại từ đầu
+        import subprocess
+        try:
+            subprocess.run(['rm', '-rf', '/tmp/checkpoint_comment'], check=True)
+            logger.info("[spark_comment] Removed old checkpoint directory")
+        except Exception as e:
+            logger.warning(f"[spark_comment] Could not remove checkpoint: {e}")
+
+        # Schema đúng với metadata từ kafka_sender.py
         schema = StructType() \
-            .add("comment_id", StringType()) \
-            .add("content_id", StringType()) \
+            .add("video_id", StringType()) \
+            .add("type", StringType()) \
+            .add("comment_count", IntegerType()) \
+            .add("success_count", IntegerType()) \
+            .add("error_count", IntegerType()) \
             .add("bucket_name", StringType()) \
-            .add("object_name", StringType()) \
+            .add("object_prefix", StringType()) \
             .add("timestamp", StringType())
 
-        # Đọc từ Kafka topic comments
         df = spark.readStream \
             .format("kafka") \
             .option("kafka.bootstrap.servers", CONFIG['kafka']['bootstrap_servers']) \
             .option("subscribe", COMMENT_TOPIC) \
-            .option("startingOffsets", "latest") \
+            .option("startingOffsets", "earliest") \
             .load()
 
-        # Giải mã và parse JSON
         json_df = df.selectExpr("CAST(value AS STRING) as json_str") \
             .select(from_json(col("json_str"), schema).alias("data")) \
             .select("data.*")
 
-        # Sử dụng foreachBatch để xử lý từng batch
         def process_batch(batch_df, batch_id):
-            """
-            Xử lý từng batch dữ liệu từ Kafka stream
-            Sử dụng hàm process_comment để xử lý từng comment riêng lẻ
-            """
+            logger.info(f"[spark_comment] process_batch called for batch_id={batch_id}, count={batch_df.count()}")
             if not batch_df.isEmpty():
-                # Convert DataFrame to pandas để xử lý từng hàng
                 pandas_df = batch_df.toPandas()
-
-                # Định nghĩa tên topic cho kết quả xử lý sentiment
-                sentiment_results_topic = "comment_sentiment_results"
-
-                # Cấu hình bucket MinIO để lưu kết quả sentiment
-                sentiment_results_bucket = "comment-sentiment-results"
-
-                # Xử lý từng hàng (mỗi hàng là một file JSON)
                 all_results = []
+                
                 for _, row in pandas_df.iterrows():
-                    if hasattr(row, 'asDict'):
-                        metadata = row.asDict()
-                    else:
-                        metadata = row.to_dict()
-
+                    metadata = row.to_dict()
                     bucket_name = metadata.get("bucket_name")
-                    object_name = metadata.get("object_name")
-                    content_id = metadata.get("content_id", "unknown")
+                    object_prefix = metadata.get("object_prefix")
+                    content_id = metadata.get("video_id", "unknown")
+                    comment_count = metadata.get("comment_count", 0)
+                    
+                    logger.info(f"[spark_comment] Processing {comment_count} comments with prefix: {object_prefix}")
 
-                    # Lấy toàn bộ dữ liệu từ MinIO
-                    video_data = get_comments_from_minio(bucket_name, object_name)
+                    try:
+                        # Liệt kê tất cả objects trong prefix
+                        objects = list(minio_client.list_objects(bucket_name, prefix=object_prefix))
+                        logger.info(f"[spark_comment] Found {len(objects)} comment objects with prefix {object_prefix}")
+                        
+                        for obj in objects:
+                            process_single_comment(obj.object_name, bucket_name, content_id, sentiment_results_bucket, sentiment_results_topic, all_results)
+                    except Exception as e:
+                        logger.error(f"[spark_comment] Error listing objects with prefix {object_prefix}: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
 
-                    if video_data is not None:
-                        # Sử dụng CommentExtractor để trích xuất và chuẩn hóa comments
-                        comments = comment_extractor.extract_comments(video_data)
-
-                        # Xử lý từng comment đã được chuẩn hóa
-                        for comment_obj in comments:
-                            # Tạo metadata cho comment hiện tại
-                            comment_metadata = {
-                                "bucket_name": bucket_name,
-                                "object_name": object_name,
-                                "content_id": content_id,
-                                "comment_id": comment_obj["id"]
-                            }
-
-                            # Kết hợp comment với metadata
-                            video_data_with_comment = {"comments": [comment_obj]}
-
-                            # Sử dụng hàm process_comment để xử lý comment
-                            result = process_comment(comment_metadata)
-
-                            # Bổ sung thêm thông tin cho result
-                            result.update({
-                                "comment_id": comment_obj["id"],
-                                "content_id": content_id,
-                                "author": comment_obj["author"],
-                                "timestamp": str(comment_obj["timestamp"]),
-                                "bucket_name": bucket_name,
-                                "object_name": object_name,
-                                "processed_at": datetime.now().isoformat()
-                            })
-
-                            all_results.append(result)
-
-                            # Lưu kết quả vào MinIO
-                            try:
-                                # Tạo tên đối tượng dựa trên content_id và comment_id
-                                object_name = f"{content_id}/{comment_obj['id']}_sentiment.json"
-
-                                # Chuyển đổi kết quả thành JSON string
-                                result_json = json.dumps(result)
-
-                                # Lưu vào MinIO
-                                from io import BytesIO
-                                result_bytes = result_json.encode('utf-8')
-                                result_stream = BytesIO(result_bytes)
-
-                                minio_client.put_object(
-                                    bucket_name=sentiment_results_bucket,
-                                    object_name=object_name,
-                                    data=result_stream,
-                                    length=len(result_bytes),
-                                    content_type="application/json"
-                                )
-
-                                logger.info(
-                                    f"Saved sentiment result to MinIO: {sentiment_results_bucket}/{object_name}")
-                            except Exception as e:
-                                logger.error(f"Error saving to MinIO: {e}")
-
-                # Gửi kết quả đến Kafka
                 if all_results:
                     for result in all_results:
                         producer.send(sentiment_results_topic, value=result)
-
-                    # Đảm bảo dữ liệu đã được gửi hết
                     producer.flush()
+                    logger.info(f"[spark_comment] Successfully processed batch {batch_id} and sent {len(all_results)} results to topic {sentiment_results_topic}")
 
-                    logger.info(
-                        f"Successfully processed batch {batch_id} and sent {len(all_results)} results to topic {sentiment_results_topic}")
+        def process_single_comment(object_name, bucket_name, content_id, sentiment_results_bucket, sentiment_results_topic, all_results):
+            logger.info(f"[spark_comment] process_single_comment called for object: {bucket_name}/{object_name}")
+            try:
+                # Lấy dữ liệu comment từ MinIO
+                comment_obj = get_comments_from_minio(bucket_name, object_name)
+                logger.info(f"[spark_comment] Data from MinIO: {str(comment_obj)[:200]}...")
+                
+                if not comment_obj:
+                    logger.warning(f"[spark_comment] No comment data in {bucket_name}/{object_name}")
+                    return
 
-        # Sử dụng foreachBatch để xử lý từng batch
+                # Phân tích ngôn ngữ
+                comment_text = comment_obj.get("text", "")
+                if not comment_text:
+                    logger.warning(f"[spark_comment] Empty comment text in {object_name}")
+                    return
+                    
+                language = language_detector.detect_language(comment_text)
+                # Phân tích sentiment
+                sentiment_result = sentiment_analyzer.analyze(comment_text)
+                # Phân tích emoji
+                emoji_result = emoji_analyzer.analyze(comment_text)
+
+                result = {
+                    "comment_id": comment_obj.get("id", "unknown"),
+                    "content_id": content_id,
+                    "author": comment_obj.get("author", "unknown"),
+                    "timestamp": str(comment_obj.get("timestamp", "")),
+                    "language": language,
+                    "sentiment": sentiment_result.get("sentiment", "neutral"),
+                    "confidence": sentiment_result.get("confidence", {"negative": 0.0, "neutral": 1.0, "positive": 0.0}),
+                    "emoji_sentiment": emoji_result.get("emoji_sentiment", "neutral"),
+                    "emoji_score": emoji_result.get("emoji_score", 0.0),
+                    "emojis_found": emoji_result.get("emojis_found", []),
+                    "bucket_name": bucket_name,
+                    "object_name": object_name,
+                    "processed_at": datetime.now().isoformat()
+                }
+                all_results.append(result)
+
+                # Lưu kết quả vào MinIO
+                try:
+                    result_object_name = f"{content_id}/{comment_obj.get('id', 'unknown')}_sentiment.json"
+                    result_json = json.dumps(result)
+                    from io import BytesIO
+                    result_bytes = result_json.encode('utf-8')
+                    result_stream = BytesIO(result_bytes)
+                    minio_client.put_object(
+                        bucket_name=sentiment_results_bucket,
+                        object_name=result_object_name,
+                        data=result_stream,
+                        length=len(result_bytes),
+                        content_type="application/json"
+                    )
+                    logger.info(f"[spark_comment] Saved sentiment result to MinIO: {sentiment_results_bucket}/{result_object_name}")
+                except Exception as e:
+                    logger.error(f"[spark_comment] Error saving to MinIO: {e}")
+            except Exception as e:
+                logger.error(f"[spark_comment] Error processing comment {object_name}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+
         query = json_df.writeStream \
             .foreachBatch(process_batch) \
             .start()
 
-        # Chờ stream kết thúc
         query.awaitTermination()
 
     except Exception as e:
         logger.error(f"[comment_consumer.run] Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     finally:
         if 'spark' in locals():
             spark.stop()
