@@ -123,47 +123,63 @@ def get_default_result():
 def get_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
     results = []
     try:
-        consumer = get_kafka_consumer(topic_name)
-        messages = consumer.poll(timeout_ms=5000, max_records=1000)
+        # Create a fresh consumer each time with a unique group ID
+        import uuid
+        unique_group = f"comment_consumer_{uuid.uuid4().hex[:8]}"
+        
+        consumer = KafkaConsumer(
+            topic_name,
+            bootstrap_servers=CONFIG['kafka']['bootstrap_servers'],
+            auto_offset_reset='earliest',  # Important: Start from the beginning
+            group_id=unique_group,
+            value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+            consumer_timeout_ms=5000
+        )
+        
+        # Get messages directly instead of using poll()
+        logger.info(f"[get_sentiment_results] Reading messages from topic {topic_name}")
+        
+        message_count = 0
+        for message in consumer:
+            try:
+                data = message.value
+                
+                # Process message data...
+                processed_time = datetime.fromisoformat(data.get("processed_at", datetime.now().isoformat()))
+                timestamp = datetime.fromisoformat(data.get("timestamp", datetime.now().isoformat()))
 
-        for topic_partition, partition_messages in messages.items():
-            for message in partition_messages:
-                try:
-                    data = message.value
+                # Xử lý confidence scores
+                confidence = data.get("confidence", {"negative": 0.0, "neutral": 1.0, "positive": 0.0})
 
-                    # Xử lý thời gian
-                    processed_time = datetime.fromisoformat(data.get("processed_at", datetime.now().isoformat()))
-                    timestamp = datetime.fromisoformat(data.get("timestamp", datetime.now().isoformat()))
+                # Xử lý emojis để đảm bảo là list
+                emojis_found = data.get("emojis_found", [])
+                if isinstance(emojis_found, str):
+                    try:
+                        emojis_found = json.loads(emojis_found)
+                    except:
+                        emojis_found = []
 
-                    # Xử lý confidence scores
-                    confidence = data.get("confidence", {"negative": 0.0, "neutral": 1.0, "positive": 0.0})
-
-                    # Xử lý emojis để đảm bảo là list
-                    emojis_found = data.get("emojis_found", [])
-                    if isinstance(emojis_found, str):
-                        try:
-                            emojis_found = json.loads(emojis_found)
-                        except:
-                            emojis_found = []
-
-                    result = {
-                        "comment_id": data.get("comment_id", ""),
-                        "content_id": data.get("content_id", ""),
-                        "language": data.get("language", "unknown"),
-                        "sentiment": data.get("sentiment", "neutral"),
-                        "confidence": confidence,
-                        "emoji_sentiment": data.get("emoji_sentiment", "neutral"),
-                        "emoji_score": data.get("emoji_score", 0.0),
-                        "emojis_found": emojis_found,
-                        "extracted_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                        "processed_at": processed_time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    results.append(result)
-                except Exception as e:
-                    logger.error(f"Lỗi xử lý message từ Kafka: {str(e)}")
-
+                result = {
+                    "comment_id": data.get("comment_id", ""),
+                    "content_id": data.get("content_id", ""),
+                    "language": data.get("language", "unknown"),
+                    "sentiment": data.get("sentiment", "neutral"),
+                    "confidence": confidence,
+                    "emoji_sentiment": data.get("emoji_sentiment", "neutral"),
+                    "emoji_score": data.get("emoji_score", 0.0),
+                    "emojis_found": emojis_found,
+                    "extracted_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "processed_at": processed_time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
+                results.append(result)
+                message_count += 1
+            except Exception as e:
+                logger.error(f"Error processing message: {e}")
+        
+        logger.info(f"[get_sentiment_results] Processed {message_count} messages from {topic_name}")
         consumer.close()
     except Exception as e:
-        logger.error(f"Lỗi đọc dữ liệu sentiment từ Kafka: {str(e)}")
-
+        logger.error(f"Error reading sentiment data from Kafka: {e}")
+        
     return results

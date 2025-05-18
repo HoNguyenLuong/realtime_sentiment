@@ -97,10 +97,39 @@ def run():
                         logger.error(traceback.format_exc())
 
                 if all_results:
-                    for result in all_results:
-                        producer.send(sentiment_results_topic, value=result)
-                    producer.flush()
-                    logger.info(f"[spark_comment] Successfully processed batch {batch_id} and sent {len(all_results)} results to topic {sentiment_results_topic}")
+                    # Send results directly to Kafka using KafkaProducer instead of relying on Spark
+                    try:
+                        for result in all_results:
+                            # Convert any non-JSON serializable data
+                            cleaned_result = json.loads(json.dumps(result, default=str))
+                            producer.send(sentiment_results_topic, value=cleaned_result)
+                        producer.flush()
+                        logger.info(f"[spark_comment] Successfully processed batch {batch_id} and sent {len(all_results)} results to topic {sentiment_results_topic}")
+                        
+                        # Add verification - consume a message to confirm it was sent
+                        from kafka import KafkaConsumer
+                        try:
+                            test_consumer = KafkaConsumer(
+                                sentiment_results_topic,
+                                bootstrap_servers=CONFIG['kafka']['bootstrap_servers'],
+                                auto_offset_reset='latest',
+                                value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+                                consumer_timeout_ms=5000,
+                                group_id='test_consumer'
+                            )
+                            
+                            # Try to get the first message
+                            for msg in test_consumer:
+                                logger.info(f"[spark_comment] Verified message in topic: {sentiment_results_topic}")
+                                break
+                            
+                            test_consumer.close()
+                        except Exception as e:
+                            logger.error(f"[spark_comment] Error verifying messages in topic: {e}")
+                            
+                    except Exception as e:
+                        logger.error(f"[spark_comment] Failed to send results to Kafka: {str(e)}")
+                        logger.error(traceback.format_exc())
 
         def process_single_comment(object_name, bucket_name, content_id, sentiment_results_bucket, sentiment_results_topic, all_results):
             logger.info(f"[spark_comment] process_single_comment called for object: {bucket_name}/{object_name}")
