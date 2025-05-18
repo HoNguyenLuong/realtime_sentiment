@@ -10,6 +10,8 @@ from src.producer.config import CONFIG, minio_client
 from datetime import datetime
 import json
 from src.producer.kafka_sender import producer
+import traceback
+from collections import defaultdict, Counter
 
 # Khởi tạo các analyzer
 sentiment_analyzer = SentimentAnalyzer()
@@ -73,7 +75,9 @@ def run():
             logger.info(f"[spark_comment] process_batch called for batch_id={batch_id}, count={batch_df.count()}")
             if not batch_df.isEmpty():
                 pandas_df = batch_df.toPandas()
-                all_results = []
+                
+                # Dictionary to group comments by video_id
+                video_results = {}
                 
                 for _, row in pandas_df.iterrows():
                     metadata = row.to_dict()
@@ -81,6 +85,18 @@ def run():
                     object_prefix = metadata.get("object_prefix")
                     content_id = metadata.get("video_id", "unknown")
                     comment_count = metadata.get("comment_count", 0)
+                    
+                    # Initialize video results if not exists
+                    if content_id not in video_results:
+                        video_results[content_id] = {
+                            "video_id": content_id,
+                            "processed_comments": 0,
+                            "sentiment_counts": {"positive": 0, "negative": 0, "neutral": 0},
+                            "emoji_counts": {"positive": 0, "negative": 0, "neutral": 0},
+                            "languages": Counter(),
+                            "details": [],
+                            "processed_at": datetime.now().isoformat()
+                        }
                     
                     logger.info(f"[spark_comment] Processing {comment_count} comments with prefix: {object_prefix}")
 
@@ -90,48 +106,45 @@ def run():
                         logger.info(f"[spark_comment] Found {len(objects)} comment objects with prefix {object_prefix}")
                         
                         for obj in objects:
-                            process_single_comment(obj.object_name, bucket_name, content_id, sentiment_results_bucket, sentiment_results_topic, all_results)
+                            process_single_comment(obj.object_name, bucket_name, content_id, 
+                                                 sentiment_results_bucket, video_results)
                     except Exception as e:
                         logger.error(f"[spark_comment] Error listing objects with prefix {object_prefix}: {e}")
-                        import traceback
                         logger.error(traceback.format_exc())
 
-                if all_results:
-                    # Send results directly to Kafka using KafkaProducer instead of relying on Spark
+                # Instead of sending individual messages, send one summary message per video
+                processed_count = 0
+                for video_id, result in video_results.items():
                     try:
-                        for result in all_results:
-                            # Convert any non-JSON serializable data
-                            cleaned_result = json.loads(json.dumps(result, default=str))
-                            producer.send(sentiment_results_topic, value=cleaned_result)
-                        producer.flush()
-                        logger.info(f"[spark_comment] Successfully processed batch {batch_id} and sent {len(all_results)} results to topic {sentiment_results_topic}")
+                        # Create a summary message similar to video_comments topic but with analysis results
+                        summary_message = {
+                            "video_id": video_id,
+                            "type": "comments_analysis",
+                            "comment_count": result["processed_comments"],
+                            "success_count": result["processed_comments"],  # All comments successfully processed
+                            "error_count": 0,                             # We didn't track errors individually
+                            "sentiment_summary": result["sentiment_counts"],
+                            "emoji_summary": result["emoji_counts"],
+                            "languages_detected": dict(result["languages"]),
+                            "status": "processed",
+                            "bucket_name": sentiment_results_bucket,       # Pointing to results bucket
+                            "processed_at": result["processed_at"],
+                            "timestamp": datetime.now().isoformat()
+                        }
                         
-                        # Add verification - consume a message to confirm it was sent
-                        from kafka import KafkaConsumer
-                        try:
-                            test_consumer = KafkaConsumer(
-                                sentiment_results_topic,
-                                bootstrap_servers=CONFIG['kafka']['bootstrap_servers'],
-                                auto_offset_reset='latest',
-                                value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-                                consumer_timeout_ms=5000,
-                                group_id='test_consumer'
-                            )
-                            
-                            # Try to get the first message
-                            for msg in test_consumer:
-                                logger.info(f"[spark_comment] Verified message in topic: {sentiment_results_topic}")
-                                break
-                            
-                            test_consumer.close()
-                        except Exception as e:
-                            logger.error(f"[spark_comment] Error verifying messages in topic: {e}")
-                            
+                        # Send the summary message to Kafka
+                        producer.send(sentiment_results_topic, value=summary_message)
+                        producer.flush()
+                        
+                        processed_count += 1
+                        logger.info(f"[spark_comment] Sent summary message for video {video_id} to topic {sentiment_results_topic}")
                     except Exception as e:
-                        logger.error(f"[spark_comment] Failed to send results to Kafka: {str(e)}")
+                        logger.error(f"[spark_comment] Failed to send summary for video {video_id} to Kafka: {str(e)}")
                         logger.error(traceback.format_exc())
+                
+                logger.info(f"[spark_comment] Successfully processed batch {batch_id} and sent {processed_count} summary messages to topic {sentiment_results_topic}")
 
-        def process_single_comment(object_name, bucket_name, content_id, sentiment_results_bucket, sentiment_results_topic, all_results):
+        def process_single_comment(object_name, bucket_name, content_id, sentiment_results_bucket, video_results):
             logger.info(f"[spark_comment] process_single_comment called for object: {bucket_name}/{object_name}")
             try:
                 # Lấy dữ liệu comment từ MinIO
@@ -169,7 +182,19 @@ def run():
                     "object_name": object_name,
                     "processed_at": datetime.now().isoformat()
                 }
-                all_results.append(result)
+
+                # Update the aggregated video results
+                video_results[content_id]["processed_comments"] += 1
+                video_results[content_id]["sentiment_counts"][sentiment_result.get("sentiment", "neutral")] += 1
+                video_results[content_id]["emoji_counts"][emoji_result.get("emoji_sentiment", "neutral")] += 1
+                video_results[content_id]["languages"][language] += 1
+                
+                # Optional: store detailed results (but don't include in Kafka message)
+                video_results[content_id]["details"].append({
+                    "comment_id": comment_obj.get("id", "unknown"),
+                    "sentiment": sentiment_result.get("sentiment", "neutral"),
+                    "emoji_sentiment": emoji_result.get("emoji_sentiment", "neutral")
+                })
 
                 # Lưu kết quả vào MinIO
                 try:
@@ -190,7 +215,6 @@ def run():
                     logger.error(f"[spark_comment] Error saving to MinIO: {e}")
             except Exception as e:
                 logger.error(f"[spark_comment] Error processing comment {object_name}: {e}")
-                import traceback
                 logger.error(traceback.format_exc())
 
         query = json_df.writeStream \
@@ -201,7 +225,6 @@ def run():
 
     except Exception as e:
         logger.error(f"[comment_consumer.run] Error: {e}")
-        import traceback
         logger.error(traceback.format_exc())
     finally:
         if 'spark' in locals():
