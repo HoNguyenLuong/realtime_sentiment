@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fusion Sentiment Analysis | YouTube Sentiment Analyzer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --fusion-color: #9333ea; /* Purple for fusion */
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+        .app-container {
+            max-width: 1000px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .app-header {
+            background: linear-gradient(to right, var(--fusion-color), #7e22ce);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .app-header h1 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 2.2rem;
+        }
+
+        .app-header p {
+            margin-top: 10px;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .app-body {
+            padding: 30px;
+        }
+
+        .nav-tabs {
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 25px;
+        }
+
+        .nav-tabs .nav-link {
+            border: none;
+            border-bottom: 3px solid transparent;
+            border-radius: 0;
+            font-weight: 600;
+            color: #555;
+            padding: 12px 16px;
+            margin-right: 10px;
+            transition: all 0.3s;
+        }
+
+        .nav-tabs .nav-link:hover {
+            color: var(--fusion-color);
+        }
+
+        .nav-tabs .nav-link.active {
+            color: var(--fusion-color);
+            border-bottom: 3px solid var(--fusion-color);
+            background-color: transparent;
+        }
+
+        .tab-content {
+            padding: 20px 0;
+        }
+
+        .fusion-overview-card {
+            background-color: #fff;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 5px solid var(--fusion-color);
+        }
+
+        .video-preview {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .video-preview iframe {
+            max-width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .back-to-main {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn-back {
+            background-color: var(--fusion-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-back:hover {
+            background-color: #7e22ce;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(147, 51, 234, 0.3);
+            color: white;
+        }
+
+        /* Charts container */
+        .fusion-charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background-color: #fff;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            border-top: 5px solid var(--fusion-color);
+        }
+
+        .chart-card h3 {
+            margin-bottom: 15px;
+            font-weight: 600;
+            color: var(--fusion-color);
+            font-size: 1.3rem;
+            text-align: center;
+        }
+
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+
+        /* Timeline */
+        .fusion-timeline {
+            margin-top: 40px;
+            position: relative;
+        }
+
+        .fusion-timeline::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 100%;
+            width: 4px;
+            background-color: var(--fusion-color);
+            opacity: 0.3;
+        }
+
+        .timeline-item {
+            margin-bottom: 30px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+        }
+
+        .timeline-content {
+            width: 80%;
+            background-color: #fff;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            position: relative;
+            border-left: 5px solid var(--fusion-color);
+        }
+
+        .timeline-content::before {
+            content: '';
+            position: absolute;
+            left: -15px;
+            top: 25px;
+            width: 15px;
+            height: 15px;
+            background-color: var(--fusion-color);
+            border-radius: 50%;
+        }
+
+        .timeline-timestamp {
+            font-size: 0.85rem;
+            color: #777;
+            margin-bottom: 10px;
+        }
+
+        .timeline-sentiment {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .sentiment-positive {
+            background-color: #4ade80;
+        }
+
+        .sentiment-negative {
+            background-color: #f87171;
+        }
+
+        .sentiment-neutral {
+            background-color: #fbbf24;
+        }
+
+        /* Source cards */
+        .source-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .source-card {
+            background-color: #fff;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            text-align: center;
+        }
+
+        .source-card h4 {
+            margin-bottom: 15px;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .source-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .source-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .comments-source .source-icon {
+            color: #4ade80;
+        }
+
+        .video-source .source-icon {
+            color: #f87171;
+        }
+
+        .audio-source .source-icon {
+            color: #60a5fa;
+        }
+
+        /* Responsive */
+        @media (max-width: 992px) {
+            .fusion-charts-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                margin: 20px;
+                border-radius: 15px;
+            }
+
+            .source-cards {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .timeline-content {
+                width: 90%;
+            }
+        }
+
+        /* Loading */
+        #loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            margin: 0 auto 15px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--fusion-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* No data message */
+        .no-data-message {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .no-data-message i {
+            font-size: 3rem;
+            color: var(--fusion-color);
+            opacity: 0.5;
+            margin-bottom: 20px;
+        }
+
+        .no-data-message h3 {
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .no-data-message p {
+            color: #777;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .btn-run-analysis {
+            background-color: var(--fusion-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+
+        .btn-run-analysis:hover {
+            background-color: #7e22ce;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(147, 51, 234, 0.3);
+        }
+
+        /* Statistics Cards */
+        .fusion-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background-color: #fff;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: var(--fusion-color);
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #777;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 992px) {
+            .fusion-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 576px) {
+            .fusion-stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="app-header">
+            <h1><i class="fas fa-microscope"></i> Fusion Sentiment Analysis</h1>
+            <p>Comprehensive analysis combining comments, video and audio sentiment</p>
+        </div>
+
+        <div class="app-body">
+            <!-- Video Preview -->
+            <div class="video-preview" id="videoPreview">
+                {% if youtube_url %}
+                <iframe id="videoIframe" width="560" height="315" src="https://www.youtube.com/embed/{{ youtube_url.split('v=')[1].split('&')[0] if 'v=' in youtube_url else youtube_url.split('/')[-1] }}" frameborder="0" allowfullscreen></iframe>
+                <div class="video-title" id="videoTitle">{{ video_title or 'Video Analysis' }}</div>
+                {% endif %}
+            </div>
+
+            <!-- Navigation tabs -->
+            <ul class="nav nav-tabs" id="fusionTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab" aria-controls="overview" aria-selected="true">
+                        <i class="fas fa-globe me-2"></i>Overview
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="timeline-tab" data-bs-toggle="tab" data-bs-target="#timeline" type="button" role="tab" aria-controls="timeline" aria-selected="false">
+                        <i class="fas fa-clock me-2"></i>Timeline Analysis
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="detailed-tab" data-bs-toggle="tab" data-bs-target="#detailed" type="button" role="tab" aria-controls="detailed" aria-selected="false">
+                        <i class="fas fa-chart-bar me-2"></i>Detailed Analysis
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Loading indicator -->
+            <div id="loading">
+                <div class="loading-spinner"></div>
+                <p>Analyzing fusion sentiment... Please wait</p>
+            </div>
+
+            <!-- No data message (shown initially if no data) -->
+            <div class="no-data-message" id="noDataMessage">
+                <i class="fas fa-exclamation-circle"></i>
+                <h3>No Fusion Analysis Available</h3>
+                <p>Run the fusion analysis to combine sentiment data from comments, video frames, and audio.</p>
+                <button id="runFusionAnalysisBtn" class="btn btn-run-analysis">
+                    <i class="fas fa-play-circle me-2"></i> Run Fusion Analysis
+                </button>
+            </div>
+
+            <!-- Tab content -->
+            <div class="tab-content" id="fusionTabsContent">
+                <!-- Overview Tab -->
+                <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+                    <!-- Overall Fusion Sentiment Card -->
+                    <div class="fusion-overview-card" id="fusionOverviewCard">
+                        <h3 class="mb-4 text-center">Overall Fusion Sentiment</h3>
+                        <div class="overall-sentiment" id="overallSentiment">
+                            <!-- This will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Statistics Cards -->
+                    <div class="fusion-stats" id="fusionStats">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-comments"></i>
+                            </div>
+                            <div class="stat-value" id="commentsCount">0</div>
+                            <div class="stat-label">Comments Analyzed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-film"></i>
+                            </div>
+                            <div class="stat-value" id="framesCount">0</div>
+                            <div class="stat-label">Video Frames</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-volume-up"></i>
+                            </div>
+                            <div class="stat-value" id="audioChunksCount">0</div>
+                            <div class="stat-label">Audio Chunks</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-pie"></i>
+                            </div>
+                            <div class="stat-value" id="fusionScore">0.00</div>
+                            <div class="stat-label">Fusion Score</div>
+                        </div>
+                    </div>
+
+                    <!-- Source weights -->
+                    <div class="source-cards">
+                        <div class="source-card comments-source">
+                            <i class="fas fa-comments source-icon"></i>
+                            <h4>Comments Weight</h4>
+                            <div class="source-value" id="commentsWeight">0.00</div>
+                            <div class="progress">
+                                <div class="progress-bar bg-success" id="commentsProgress" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="source-card video-source">
+                            <i class="fas fa-film source-icon"></i>
+                            <h4>Video Weight</h4>
+                            <div class="source-value" id="videoWeight">0.00</div>
+                            <div class="progress">
+                                <div class="progress-bar bg-danger" id="videoProgress" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="source-card audio-source">
+                            <i class="fas fa-volume-up source-icon"></i>
+                            <h4>Audio Weight</h4>
+                            <div class="source-value" id="audioWeight">0.00</div>
+                            <div class="progress">
+                                <div class="progress-bar bg-primary" id="audioProgress" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chart container -->
+                    <div class="fusion-charts-container">
+                        <div class="chart-card">
+                            <h3>Sentiment Distribution</h3>
+                            <div class="chart-container">
+                                <canvas id="sentimentPieChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Source Contribution</h3>
+                            <div class="chart-container">
+                                <canvas id="sourceContributionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Tab -->
+                <div class="tab-pane fade" id="timeline" role="tabpanel" aria-labelledby="timeline-tab">
+                    <div class="fusion-timeline" id="fusionTimeline">
+                        <!-- Timeline items will be inserted here by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Detailed Analysis Tab -->
+                <div class="tab-pane fade" id="detailed" role="tabpanel" aria-labelledby="detailed-tab">
+                    <div class="fusion-charts-container">
+                        <div class="chart-card">
+                            <h3>Emotion Correlation</h3>
+                            <div class="chart-container">
+                                <canvas id="emotionCorrelationChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Sentiment Trend</h3>
+                            <div class="chart-container">
+                                <canvas id="sentimentTrendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card mt-4">
+                        <h3>Source Comparison</h3>
+                        <div class="chart-container">
+                            <canvas id="sourceComparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Back to main button -->
+            <div class="back-to-main">
+                <a href="/" class="btn btn-back">
+                    <i class="fas fa-arrow-left me-2"></i> Back to Main Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // DOM elements
+        const loadingElement = document.getElementById('loading');
+        const noDataMessage = document.getElementById('noDataMessage');
+        const fusionTabsContent = document.getElementById('fusionTabsContent');
+        const runFusionAnalysisBtn = document.getElementById('runFusionAnalysisBtn');
+        const fusionOverviewCard = document.getElementById('fusionOverviewCard');
+        const fusionTimeline = document.getElementById('fusionTimeline');
+
+        // Charts
+        let sentimentPieChart;
+        let sourceContributionChart;
+        let emotionCorrelationChart;
+        let sentimentTrendChart;
+        let sourceComparisonChart;
+
+        // Initial data state
+        let fusionData = null;
+        let hasData = false;
+
+        // Helper functions
+        function getSentimentColor(sentiment) {
+            if (sentiment === 'Positive') return '#4ade80';
+            if (sentiment === 'Negative') return '#f87171';
+            return '#fbbf24'; // Neutral
+        }
+
+        function getSentimentClass(sentiment) {
+            if (sentiment === 'Positive') return 'sentiment-positive';
+            if (sentiment === 'Negative') return 'sentiment-negative';
+            return 'sentiment-neutral'; // Neutral
+        }
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if data is available
+            checkForFusionData();
+
+            // Run Fusion Analysis button event
+            if (runFusionAnalysisBtn) {
+                runFusionAnalysisBtn.addEventListener('click', runFusionAnalysis);
+            }
+        });
+
+        // Function to check if fusion data is available
+        function checkForFusionData() {
+            loadingElement.style.display = 'block';
+            noDataMessage.style.display = 'none';
+            fusionTabsContent.style.display = 'none';
+
+            fetch('/api/get_fusion_sentiment')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('No fusion data available');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    fusionData = data;
+                    hasData = true;
+                    loadingElement.style.display = 'none';
+                    noDataMessage.style.display = 'none';
+                    fusionTabsContent.style.display = 'block';
+
+                    // Render all visualizations
+                    renderFusionData();
+                })
+                .catch(error => {
+                    console.error('Error loading fusion data:', error);
+                    loadingElement.style.display = 'none';
+                    noDataMessage.style.display = 'block';
+                    fusionTabsContent.style.display = 'none';
+                });
+        }
+
+        // Function to run fusion analysis
+        function runFusionAnalysis() {
+            loadingElement.style.display = 'block';
+            noDataMessage.style.display = 'none';
+            runFusionAnalysisBtn.disabled = true;
+            runFusionAnalysisBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running Analysis...';
+
+            fetch('/api/run_fusion_analysis', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Reload data after analysis
+                checkForFusionData();
+            })
+            .catch(error => {
+                console.error('Error running fusion analysis:', error);
+                loadingElement.style.display = 'none';
+                noDataMessage.style.display = 'block';
+                runFusionAnalysisBtn.disabled = false;
+                runFusionAnalysisBtn.innerHTML = '<i class="fas fa-play-circle me-2"></i> Run Fusion Analysis';
+                alert('Error running fusion analysis. Please try again.');
+            });
+        }
+
+        // Render all fusion data visualizations
+        function renderFusionData() {
+            if (!fusionData) return;
+
+            // Update statistics
+            updateStatistics();
+
+            // Render overview sentiment
+            renderOverallSentiment();
+
+            // Initialize charts
+            initializeCharts();
+
+            // Render timeline
+            renderTimeline();
+        }
+
+        // Update statistics cards
+        function updateStatistics() {
+            // Fetch additional stats if they're not in the fusion data
+            fetch('/api/get_stats')
+                .then(response => response.json())
+                .then(stats => {
+                    // Update counts
+                    document.getElementById('commentsCount').textContent = stats.comments_count || 0;
+                    document.getElementById('framesCount').textContent = stats.frames_count || 0;
+                    document.getElementById('audioChunksCount').textContent = stats.audio_chunks_count || 0;
+
+                    // Update fusion score (could be from fusion data)
+                    document.getElementById('fusionScore').textContent =
+                        fusionData?.fusion_score?.toFixed(2) || '0.00';
+
+                    // Update weights
+                    if (fusionData?.weighted_results) {
+                        const commentsWeight = fusionData.weighted_results.Comments || 0;
+                        const videoWeight = fusionData.weighted_results.Video || 0;
+                        const audioWeight = fusionData.weighted_results.Audio || 0;
+
+                        document.getElementById('commentsWeight').textContent = commentsWeight.toFixed(2);
+                        document.getElementById('videoWeight').textContent = videoWeight.toFixed(2);
+                        document.getElementById('audioWeight').textContent = audioWeight.toFixed(2);
+
+                        // Update progress bars
+                        const total = commentsWeight + videoWeight + audioWeight;
+                        if (total > 0) {
+                            document.getElementById('commentsProgress').style.width =
+                                `${(commentsWeight / total) * 100}%`;
+                            document.getElementById('videoProgress').style.width =
+                                `${(videoWeight / total) * 100}%`;
+                            document.getElementById('audioProgress').style.width =
+                                `${(audioWeight / total) * 100}%`;
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading statistics:', error);
+                });
+        }
+
+        // Render overall sentiment
+        function renderOverallSentiment() {
+            const sentimentName = fusionData.overall_sentiment || 'Neutral';
+            const sentimentColor = getSentimentColor(sentimentName);
+
+            // Create sentiment display
+            const sentimentHTML = `
+                <div class="text-center">
+                    <div class="display-4 mb-3" style="color: ${sentimentColor};">
+                        <i class="fas fa-${sentimentName === 'Positive' ? 'smile-beam' :
+                                        sentimentName === 'Negative' ? 'angry' : 'meh'}"></i>
+                    </div>
+                    <h2 style="color: ${sentimentColor};">${sentimentName}</h2>
+                    <p class="lead">Overall fusion sentiment across all analysis sources</p>
+
+                    <div class="mt-4 p-3" style="background-color: ${sentimentColor}; color: white; border-radius: 10px;">
+                        <h4>Fusion Analysis Result</h4>
+                        <p class="mb-0">Based on combined analysis of comments, video emotions, and audio sentiment</p>
+                    </div>
+                </div>
+            `;
+
+            fusionOverviewCard.querySelector('.overall-sentiment').innerHTML = sentimentHTML;
+        }
+
+        // Initialize all charts
+        function initializeCharts() {
+            // Sentiment Pie Chart
+            const sentimentPieCtx = document.getElementById('sentimentPieChart').getContext('2d');
+            sentimentPieChart = new Chart(sentimentPieCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral'],
+                    datasets: [{
+                        data: [
+                            fusionData.sentiment_distribution?.positive || 0,
+                            fusionData.sentiment_distribution?.negative || 0,
+                            fusionData.sentiment_distribution?.neutral || 0
+                        ],
+                        backgroundColor: ['#4ade80', '#f87171', '#fbbf24']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Source Contribution Chart
+            const sourceContributionCtx = document.getElementById('sourceContributionChart').getContext('2d');
+            sourceContributionChart = new Chart(sourceContributionCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Comments', 'Video', 'Audio'],
+                    datasets: [{
+                        data: [
+                            fusionData.weighted_results?.Comments || 0,
+                            fusionData.weighted_results?.Video || 0,
+                            fusionData.weighted_results?.Audio || 0
+                        ],
+                        backgroundColor: ['#4ade80', '#f87171', '#60a5fa']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            // Emotion Correlation Chart
+            const emotionCorrelationCtx = document.getElementById('emotionCorrelationChart').getContext('2d');
+            emotionCorrelationChart = new Chart(emotionCorrelationCtx, {
+                type: 'radar',
+                data: {
+                    labels: ['Joy', 'Sadness', 'Anger', 'Fear', 'Surprise', 'Disgust'],
+                    datasets: [
+                        {
+                            label: 'Video Emotions',
+                            data: [
+                                fusionData.emotion_correlation?.video?.joy || 0,
+                                fusionData.emotion_correlation?.video?.sadness || 0,
+                                fusionData.emotion_correlation?.video?.anger || 0,
+                                fusionData.emotion_correlation?.video?.fear || 0,
+                                fusionData.emotion_correlation?.video?.surprise || 0,
+                                fusionData.emotion_correlation?.video?.disgust || 0
+                            ],
+                            backgroundColor: 'rgba(248, 113, 113, 0.2)',
+                            borderColor: 'rgba(248, 113, 113, 1)',
+                            pointBackgroundColor: 'rgba(248, 113, 113, 1)',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: 'rgba(248, 113, 113, 1)'
+                        },
+                        {
+                            label: 'Audio Emotions',
+                            data: [
+                                fusionData.emotion_correlation?.audio?.joy || 0,
+                                fusionData.emotion_correlation?.audio?.sadness || 0,
+                                fusionData.emotion_correlation?.audio?.anger || 0,
+                                fusionData.emotion_correlation?.audio?.fear || 0,
+                                fusionData.emotion_correlation?.audio?.surprise || 0,
+                                fusionData.emotion_correlation?.audio?.disgust || 0
+                            ],
+                            backgroundColor: 'rgba(96, 165, 250, 0.2)',
+                            borderColor: 'rgba(96, 165, 250, 1)',
+                            pointBackgroundColor: 'rgba(96, 165, 250, 1)',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: 'rgba(96, 165, 250, 1)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: {
+                                display: true
+                            },
+                            ticks: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Sentiment Trend Chart
+            const sentimentTrendCtx = document.getElementById('sentimentTrendChart').getContext('2d');
+            const sentimentTrendData = fusionData.sentiment_trend || [];
+            const timestamps = sentimentTrendData.map(item => item.timestamp || '');
+            sentimentTrendChart = new Chart(sentimentTrendCtx, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [
+                        {
+                            label: 'Positive',
+                            data: sentimentTrendData.map(item => item.positive || 0),
+                            borderColor: 'rgba(74, 222, 128, 1)',
+                            backgroundColor: 'rgba(74, 222, 128, 0.2)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Negative',
+                            data: sentimentTrendData.map(item => item.negative || 0),
+                            borderColor: 'rgba(248, 113, 113, 1)',
+                            backgroundColor: 'rgba(248, 113, 113, 0.2)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Neutral',
+                            data: sentimentTrendData.map(item => item.neutral || 0),
+                            borderColor: 'rgba(251, 191, 36, 1)',
+                            backgroundColor: 'rgba(251, 191, 36, 0.2)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(1);
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Source Comparison Chart
+            const sourceComparisonCtx = document.getElementById('sourceComparisonChart').getContext('2d');
+            sourceComparisonChart = new Chart(sourceComparisonCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral'],
+                    datasets: [
+                        {
+                            label: 'Comments',
+                            data: [
+                                fusionData.source_comparison?.comments?.positive || 0,
+                                fusionData.source_comparison?.comments?.negative || 0,
+                                fusionData.source_comparison?.comments?.neutral || 0
+                            ],
+                            backgroundColor: 'rgba(74, 222, 128, 0.8)'
+                        },
+                        {
+                            label: 'Video',
+                            data: [
+                                fusionData.source_comparison?.video?.positive || 0,
+                                fusionData.source_comparison?.video?.negative || 0,
+                                fusionData.source_comparison?.video?.neutral || 0
+                            ],
+                            backgroundColor: 'rgba(248, 113, 113, 0.8)'
+                        },
+                        {
+                            label: 'Audio',
+                            data: [
+                                fusionData.source_comparison?.audio?.positive || 0,
+                                fusionData.source_comparison?.audio?.negative || 0,
+                                fusionData.source_comparison?.audio?.neutral || 0
+                            ],
+                            backgroundColor: 'rgba(96, 165, 250, 0.8)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Render timeline
+        function renderTimeline() {
+            if (!fusionData.timeline || !fusionData.timeline.length) {
+                fusionTimeline.innerHTML = `
+                    <div class="no-data-message">
+                        <i class="fas fa-clock"></i>
+                        <h3>No Timeline Data Available</h3>
+                        <p>Timeline analysis data is not available for this video.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Clear existing timeline
+            fusionTimeline.innerHTML = '';
+
+            // Add timeline items
+            fusionData.timeline.forEach(item => {
+                const sentimentClass = getSentimentClass(item.sentiment);
+                const timelineItem = document.createElement('div');
+                timelineItem.className = 'timeline-item';
+
+                timelineItem.innerHTML = `
+                    <div class="timeline-content">
+                        <div class="timeline-timestamp">
+                            <i class="fas fa-clock me-1"></i> ${item.timestamp}
+                        </div>
+                        <div class="timeline-event">
+                            <strong>${item.event_type}</strong>: ${item.description}
+                        </div>
+                        <div class="timeline-sentiment ${sentimentClass}">
+                            <i class="fas fa-${item.sentiment === 'Positive' ? 'smile-beam' :
+                                            item.sentiment === 'Negative' ? 'angry' : 'meh'} me-2"></i>
+                            ${item.sentiment}
+                        </div>
+                    </div>
+                `;
+
+                fusionTimeline.appendChild(timelineItem);
+            });
+        }
+
+        // Mock data for development and testing
+        function loadMockData() {
+            const mockData = {
+                overall_sentiment: "Positive",
+                fusion_score: 0.78,
+                weighted_results: {
+                    Comments: 0.35,
+                    Video: 0.25,
+                    Audio: 0.40
+                },
+                sentiment_distribution: {
+                    positive: 0.65,
+                    negative: 0.15,
+                    neutral: 0.20
+                },
+                timeline: [
+                    {
+                        timestamp: "00:01:15",
+                        event_type: "Comment Spike",
+                        description: "Multiple positive comments about the opening scene",
+                        sentiment: "Positive"
+                    },
+                    {
+                        timestamp: "00:03:42",
+                        event_type: "Audio Event",
+                        description: "Detected elevated tone and excitement in speech",
+                        sentiment: "Positive"
+                    },
+                    {
+                        timestamp: "00:07:18",
+                        event_type: "Video Event",
+                        description: "Facial expressions indicated concern",
+                        sentiment: "Negative"
+                    },
+                    {
+                        timestamp: "00:12:05",
+                        event_type: "Fusion Event",
+                        description: "Combined positive sentiment from all sources",
+                        sentiment: "Positive"
+                    }
+                ],
+                emotion_correlation: {
+                    video: {
+                        joy: 0.65,
+                        sadness: 0.15,
+                        anger: 0.10,
+                        fear: 0.05,
+                        surprise: 0.45,
+                        disgust: 0.05
+                    },
+                    audio: {
+                        joy: 0.55,
+                        sadness: 0.20,
+                        anger: 0.15,
+                        fear: 0.10,
+                        surprise: 0.35,
+                        disgust: 0.10
+                    }
+                },
+                sentiment_trend: [
+                    {timestamp: "00:00:00", positive: 0.50, negative: 0.20, neutral: 0.30},
+                    {timestamp: "00:05:00", positive: 0.60, negative: 0.15, neutral: 0.25},
+                    {timestamp: "00:10:00", positive: 0.70, negative: 0.10, neutral: 0.20},
+                    {timestamp: "00:15:00", positive: 0.65, negative: 0.15, neutral: 0.20},
+                    {timestamp: "00:20:00", positive: 0.75, negative: 0.10, neutral: 0.15}
+                ],
+                source_comparison: {
+                    comments: {
+                        positive: 0.70,
+                        negative: 0.15,
+                        neutral: 0.15
+                    },
+                    video: {
+                        positive: 0.60,
+                        negative: 0.25,
+                        neutral: 0.15
+                    },
+                    audio: {
+                        positive: 0.65,
+                        negative: 0.20,
+                        neutral: 0.15
+                    }
+                }
+            };
+
+            fusionData = mockData;
+            hasData = true;
+            renderFusionData();
+        }
+    </script>
+</body>
+</html>

@@ -712,6 +712,21 @@
             loadingDiv.style.display = 'block';
             resultDiv.style.display = 'none';
             noCommentsMessage.style.display = 'none';
+
+            // Reset the state
+            processedFrames.clear();
+            processedAudioChunks.clear(); // Reset audio chunks tracking
+
+            // Reset audio container
+            const audioContainer = document.getElementById('audioContainer');
+            if (audioContainer) {
+                const noAudioMessage = document.getElementById('noAudioMessage');
+                if (noAudioMessage) {
+                    audioContainer.innerHTML = noAudioMessage.outerHTML;
+                } else {
+                    audioContainer.innerHTML = '<div class="no-frames-message" id="noAudioMessage"><i class="fas fa-volume-up fa-2x mb-3 text-primary"></i><h4>No Audio Analysis Yet</h4><p>Audio analysis will appear here once processing begins</p></div>';
+                }
+            }
         });
 
         // Function to extract YouTube video ID from URL
@@ -721,34 +736,76 @@
             return (match && match[2].length === 11) ? match[2] : null;
         }
 
-        // Helper function to create emotion badges
         // This is the function that creates emotion badges in your UI
         function createEmotionBadges(emotions) {
             let badgesHTML = '';
 
             if (!emotions) return badgesHTML;
 
-            // Map emotion names to appropriate classes
-            const emotionClasses = {
-                'happy': 'happy',
-                'sad': 'sad',
-                'angry': 'angry',
-                'surprise': 'surprise',
-                'fear': 'fear',
-                'neutral': 'neutral',
-                'disgust': 'disgusted'
-            };
+            // If emotions is an array, display each emotion in its original order
+            if (Array.isArray(emotions)) {
+                emotions.forEach(emotion => {
+                    const className = emotion.toLowerCase();
+                    badgesHTML += `<span class="emotion-badge ${className}">${emotion}</span>`;
+                });
+            }
+            // Original code for handling object format
+            else if (typeof emotions === 'object') {
+                const emotionClasses = {
+                    'happy': 'happy',
+                    'sad': 'sad',
+                    'angry': 'angry',
+                    'surprise': 'surprise',
+                    'fear': 'fear',
+                    'neutral': 'neutral',
+                    'disgust': 'disgusted'
+                };
 
-            // Process each emotion in the object
-            for (const [emotion, value] of Object.entries(emotions)) {
-                if (value > 0) {
-                    const className = emotionClasses[emotion.toLowerCase()] || 'neutral';
-                    badgesHTML += `<span class="emotion-badge ${className}">${emotion}: ${value}</span>`;
+                for (const [emotion, value] of Object.entries(emotions)) {
+                    if (value > 0) {
+                        const className = emotionClasses[emotion.toLowerCase()] || 'neutral';
+                        badgesHTML += `<span class="emotion-badge ${className}">${emotion}: ${value}</span>`;
+                    }
                 }
             }
 
             return badgesHTML;
         }
+        {#function createEmotionBadges(emotions) {#}
+        {#    let badgesHTML = '';#}
+        {#    #}
+        {#    if (!emotions) return badgesHTML;#}
+        {#    #}
+        {#    // If emotions is an array, display each emotion in its original order#}
+        {#    if (Array.isArray(emotions)) {#}
+        {#        emotions.forEach((emotion, index) => {#}
+        {#            const className = emotion.toLowerCase();#}
+        {#            // Hiển thị index+1 để biết đây là khuôn mặt thứ mấy#}
+        {#            badgesHTML += `<span class="emotion-badge ${className}">Face ${index+1}: ${emotion}</span>`;#}
+        {#        });#}
+        {#    } #}
+        {#    // Original code for handling object format#}
+        {#    else if (typeof emotions === 'object') {#}
+        {#        const emotionClasses = {#}
+        {#            'happy': 'happy',#}
+        {#            'sad': 'sad',#}
+        {#            'angry': 'angry',#}
+        {#            'surprise': 'surprise',#}
+        {#            'fear': 'fear',#}
+        {#            'neutral': 'neutral',#}
+        {#            'disgust': 'disgusted'#}
+        {#        };#}
+        {##}
+        {#        for (const [emotion, value] of Object.entries(emotions)) {#}
+        {#            if (value > 0) {#}
+        {#                const className = emotionClasses[emotion.toLowerCase()] || 'neutral';#}
+        {#                badgesHTML += `<span class="emotion-badge ${className}">${emotion}: ${value}</span>`;#}
+        {#            }#}
+        {#        }#}
+        {#    }#}
+        {#    #}
+        {#    return badgesHTML;#}
+        {##}
 
         // This is the function that updates the video frames in your UI
         function updateVideoFrames() {
@@ -866,42 +923,86 @@
 
         // Function để tạo một audio card
         function createAudioCard(audio, isNew = false) {
-            // Tạo badges cho sentiment
+            // Kiểm tra và xử lý dữ liệu an toàn
+            if (!audio) return '';
+
+            const chunkId = audio.chunk_id || 'unknown';
+            const processedAt = audio.processed_at || 'unknown time';
+            const text = audio.text || 'No text available';
+
+            // Create badges for sentiment
             let sentimentBadges = '';
             if (audio.sentiment) {
-                for (const [sentiment, value] of Object.entries(audio.sentiment)) {
-                    if (value > 0) {
-                        const className = `sentiment-${sentiment.toLowerCase()}`;
-                        sentimentBadges += `<span class="emotion-badge ${className}">${sentiment}: ${value}</span>`;
+                // Kiểm tra xem sentiment có phải là object hay không
+                if (typeof audio.sentiment === 'object' && !Array.isArray(audio.sentiment)) {
+                    for (const [sentiment, value] of Object.entries(audio.sentiment)) {
+                        if (value > 0) {
+                            const sentimentClass = mapEmotionToClass(sentiment);
+                            // Hiển thị giá trị dưới dạng phần trăm nếu là số thập phân
+                            const displayValue = typeof value === 'number' && value <= 1
+                                ? Math.round(value * 100) + '%'
+                                : value;
+                            sentimentBadges += `<span class="emotion-badge ${sentimentClass}">${sentiment}: ${displayValue}</span>`;
+                        }
                     }
+                } else if (Array.isArray(audio.sentiment)) {
+                    // Xử lý nếu sentiment là mảng
+                    audio.sentiment.forEach(s => {
+                        if (typeof s === 'string') {
+                            const sentimentClass = mapEmotionToClass(s);
+                            sentimentBadges += `<span class="emotion-badge ${sentimentClass}">${s}</span>`;
+                        }
+                    });
+                } else if (typeof audio.sentiment === 'string') {
+                    // Nếu sentiment chỉ là một string đơn
+                    const sentimentClass = mapEmotionToClass(audio.sentiment);
+                    sentimentBadges += `<span class="emotion-badge ${sentimentClass}">${audio.sentiment}</span>`;
                 }
             }
 
-            // Tạo badges cho emotion
+            // Create badges for emotion - handling multiple formats
             let emotionBadges = '';
             if (audio.emotion) {
-                for (const [emotion, value] of Object.entries(audio.emotion)) {
-                    if (value > 0) {
-                        // Sử dụng lại classes từ emotion video
-                        const emotionClass = mapEmotionToClass(emotion);
-                        emotionBadges += `<span class="emotion-badge ${emotionClass}">${emotion}: ${value}</span>`;
+                if (Array.isArray(audio.emotion)) {
+                    // Handle array format
+                    audio.emotion.forEach(emotion => {
+                        if (typeof emotion === 'string') {
+                            const emotionClass = mapEmotionToClass(emotion);
+                            emotionBadges += `<span class="emotion-badge ${emotionClass}">${emotion}</span>`;
+                        }
+                    });
+                } else if (typeof audio.emotion === 'object') {
+                    // Handle object format
+                    for (const [emotion, value] of Object.entries(audio.emotion)) {
+                        if (value > 0) {
+                            const emotionClass = mapEmotionToClass(emotion);
+                            // Format value appropriately
+                            const displayValue = typeof value === 'number' && value <= 1
+                                ? Math.round(value * 100) + '%'
+                                : value;
+                            emotionBadges += `<span class="emotion-badge ${emotionClass}">${emotion}: ${displayValue}</span>`;
+                        }
                     }
+                } else if (typeof audio.emotion === 'string') {
+                    // Handle single string emotion
+                    const emotionClass = mapEmotionToClass(audio.emotion);
+                    emotionBadges += `<span class="emotion-badge ${emotionClass}">${audio.emotion}</span>`;
                 }
             }
 
             return `
-                <div class="audio-card ${isNew ? 'new' : ''}" id="audio-${audio.chunk_id}">
+                <div class="audio-card ${isNew ? 'new' : ''}" id="audio-${chunkId}">
                     <div class="audio-header">
-                        <div class="chunk-id">Chunk #${audio.chunk_id}</div>
+                        <div class="chunk-id">Chunk #${chunkId}</div>
                         <div class="audio-time">
-                            <i class="far fa-clock me-1"></i> Processed at: ${audio.processed_at}
+                            <i class="far fa-clock me-1"></i> Processed at: ${processedAt}
                         </div>
                     </div>
-                    <div class="audio-text">"${audio.text}"</div>
+                    <div class="audio-text">"${text}"</div>
                     <div class="frame-details">
                         <div class="emotions-badges">
-                            ${sentimentBadges}
-                            ${emotionBadges}
+                            ${sentimentBadges || ''}
+                            ${emotionBadges || ''}
                         </div>
                     </div>
                 </div>
@@ -910,25 +1011,46 @@
 
         // Mapping emotion names to CSS classes
         function mapEmotionToClass(emotion) {
+            if (!emotion) return 'neutral';
+
+            const emotionLower = emotion.toLowerCase();
+
             const map = {
                 'happy': 'happy',
                 'joy': 'happy',
+                'happiness': 'happy',
+                'hap': 'happy',
                 'sad': 'sad',
                 'sadness': 'sad',
                 'angry': 'angry',
                 'anger': 'angry',
+                'ang': 'angry',
                 'surprise': 'surprise',
+                'surprised': 'surprise',
+                'sur': 'surprise',
                 'fear': 'fear',
+                'fea': 'fear',
                 'neutral': 'neutral',
-                'disgust': 'disgusted'
+                'neu': 'neutral',
+                'disgust': 'disgusted',
+                'disgusted': 'disgusted',
+                'dis': 'disgusted',
+                'positive': 'happy',
+                'negative': 'sad',
+                'mixed': 'neutral'
             };
 
-            return map[emotion.toLowerCase()] || 'neutral';
+            return map[emotionLower] || 'neutral';
         }
 
         // Function to update audio results
         function updateAudioResults() {
-            fetch('/api/get_audio_sentiments')
+            // Lấy video_id từ URL hiện tại
+            const videoId = getYoutubeId(document.getElementById('youtube_url').value);
+
+            if (!videoId) return; // Không tiếp tục nếu không có video_id
+
+            fetch('/api/get_audio_sentiments?video_id=' + videoId)
                 .then(response => response.json())
                 .then(data => {
                     if (data && data.length > 0) {
@@ -942,7 +1064,7 @@
                             // Update our set of processed chunks
                             newAudioChunks.forEach(chunk => processedAudioChunks.add(chunk.chunk_id));
 
-                            // Sort newest first
+                            // Sort newest first (should already be sorted from server)
                             newAudioChunks.sort((a, b) => {
                                 return new Date(b.processed_at) - new Date(a.processed_at);
                             });
@@ -999,4 +1121,4 @@
         {% endif %}
     </script>
 </body>
-</html
+</html>

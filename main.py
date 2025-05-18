@@ -67,16 +67,20 @@ import os
 # Import các module cần thiết
 from src.api.routes import router as api_router
 from src.producer.controller import process_url
+from src.producer.config import minio_client, MINIO_BUCKET, FUSION_OBJECT_NAME
 from src.consumer.spark_video import run as run_video_consumer
+from src.utils.fusion_utils import get_fusion_component_results, get_fusion_sentiment_results
 from src.utils.image_utils import get_sentiment_results as get_video_sentiment_results  # Đổi tên để tránh nhầm lẫn
 from src.utils.audio_utils import get_audio_sentiment_results
 from src.consumer.spark_audio import run as run_audio_consumer
+from src.consumer.fusion_consumer import run as run_fusion_consumer
 
 # Cache kết quả sentiment - với các key rõ ràng để tránh nhầm lẫn
 sentiment_results = {
     "comment_sentiment": {"positive": 0, "negative": 0, "neutral": 0},
     "video_sentiment": [],
-    "audio_sentiment": []
+    "audio_sentiment": [],
+    "fusion_sentiment": {}
 }
 # Phần lifespan handler để khởi động background tasks
 @asynccontextmanager
@@ -90,6 +94,10 @@ async def lifespan(app: FastAPI):
     audio_consumer_thread = threading.Thread(target=run_audio_consumer, daemon=True)
     audio_consumer_thread.start()
     print("✅ Audio consumer started in background")
+
+    fusion_consumer_thread = threading.Thread(target=run_fusion_consumer, daemon=True)
+    fusion_consumer_thread.start()
+    print("✅ Fusion consumer started in background")
 
     # Cho consumer thời gian để khởi động hoàn toàn
     time.sleep(5)
@@ -228,13 +236,20 @@ async def get_video_sentiments():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/get_audio_sentiments")
-async def get_audio_sentiments():
+async def get_audio_sentiments(video_id: str = None):
     """API endpoint để lấy kết quả phân tích cảm xúc từ audio"""
     try:
         # Lấy kết quả sentiment từ audio sử dụng hàm từ utils
-        # Sử dụng Kafka topic "audio_results" đã được định nghĩa trong spark_audio.py
         results = get_audio_sentiment_results("audio_results")
+
+        # Lọc kết quả theo video_id nếu được cung cấp
+        if video_id:
+            results = [r for r in results if r.get("video_id") == video_id]
+
+        # Sắp xếp lại kết quả theo thời gian xử lý (mới nhất trước)
+        results.sort(key=lambda x: x.get("processed_at", ""), reverse=True)
 
         # Cache kết quả
         sentiment_results["audio_sentiment"] = results
@@ -295,6 +310,49 @@ async def status():
         "audio_chunks_analyzed": len(sentiment_results["audio_sentiment"]),  # Thêm số lượng audio chunks
     }
 
+@app.get("/fusion_sentiment", response_class=HTMLResponse)
+async def fusion_sentiment_page(request: Request):
+    """Trang hiển thị kết quả phân tích cảm xúc tổng hợp (fusion)"""
+    try:
+        # Kiểm tra xem đã có kết quả fusion trong cache chưa
+        if not sentiment_results["fusion_sentiment"]:
+            # Nếu chưa, thử lấy từ fusion utils
+            result = get_fusion_sentiment_results()
+            if result:
+                sentiment_results["fusion_sentiment"] = result
+            else:
+                # Nếu không có kết quả, hiển thị thông báo đang xử lý
+                messages = [{"category": "info",
+                            "message": "Đang xử lý phân tích cảm xúc tổng hợp. Trang sẽ tự động cập nhật khi có kết quả."}]
+                return templates.TemplateResponse("fusion_sentiment.html", {
+                    "request": request,
+                    "result": {},
+                    "auto_refresh": True,  # Thêm flag để template biết cần auto-refresh
+                    "messages": messages
+                })
+
+        # Lấy thêm kết quả thành phần nếu có template hiển thị chi tiết
+        component_results = None
+        try:
+            component_results = get_fusion_component_results()
+        except Exception:
+            pass  # Bỏ qua lỗi khi không lấy được kết quả thành phần
+
+        return templates.TemplateResponse("fusion_sentiment.html", {
+            "request": request,
+            "result": sentiment_results["fusion_sentiment"],
+            "components": component_results,
+            "auto_refresh": False,  # Không cần auto-refresh nữa vì đã có kết quả
+            "messages": []
+        })
+    except Exception as e:
+        messages = [{"category": "danger", "message": f"Lỗi khi tải dữ liệu fusion: {str(e)}"}]
+        return templates.TemplateResponse("fusion_sentiment.html", {
+            "request": request,
+            "result": {},
+            "auto_refresh": True,  # Vẫn cần auto-refresh để thử lại
+            "messages": messages
+        })
 # Run uvicorn server
 if __name__ == "__main__":
     import uvicorn

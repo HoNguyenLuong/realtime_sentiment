@@ -36,11 +36,14 @@ minio_client = Minio(
     secure=False
 )
 
+MINIO_BUCKET = "sentiment-results"
+FUSION_OBJECT_NAME = "fusion-results.json"
 # Ensure buckets exist
 buckets = [
     CONFIG['video']['frames_bucket'],
     CONFIG['audio']['audio_bucket'],
-    CONFIG['comments']['comments_bucket']  # Thêm bucket comments
+    CONFIG['comments']['comments_bucket'], # Thêm bucket comments
+    MINIO_BUCKET
 ]
 for bucket in buckets:
     if not minio_client.bucket_exists(bucket):

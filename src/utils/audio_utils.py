@@ -5,12 +5,13 @@ from src.consumer.common import logger
 from src.producer.config import minio_client
 
 
-def get_audio_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
+def get_audio_sentiment_results(topic_name: str, video_id: str = None) -> List[Dict[Any, Any]]:
     """
     Lấy kết quả phân tích cảm xúc từ MinIO bucket cho audio.
 
     Args:
         topic_name (str): Tên của topic Kafka (chỉ dùng để xác định các thông số liên quan)
+        video_id (str, optional): ID của video để lọc kết quả. Defaults to None.
 
     Returns:
         List[Dict[Any, Any]]: Danh sách kết quả phân tích cảm xúc âm thanh.
@@ -29,6 +30,10 @@ def get_audio_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
                 data = minio_client.get_object(audio_results_bucket, obj.object_name)
                 content = data.read().decode('utf-8')
                 audio_data = json.loads(content)
+
+                # Lọc theo video_id nếu được cung cấp
+                if video_id and audio_data.get("video_id") != video_id:
+                    continue
 
                 # Kiểm tra xem có các trường cần thiết không
                 if all(key in audio_data for key in
@@ -49,7 +54,7 @@ def get_audio_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
                     # Tạo kết quả với định dạng đồng nhất
                     result = {
                         "chunk_id": audio_data["chunk_id"],
-                        "video_id": audio_data["video_id"],  # Sử dụng video_id thay vì audio_id
+                        "video_id": audio_data["video_id"],
                         "text": audio_data["text"],
                         "sentiment": audio_data["sentiment"],
                         "emotion": audio_data["emotion"],
@@ -61,8 +66,8 @@ def get_audio_sentiment_results(topic_name: str) -> List[Dict[Any, Any]]:
             except Exception as e:
                 logger.error(f"Lỗi khi xử lý object {obj.object_name}: {str(e)}")
 
-        # Sắp xếp kết quả theo timestamp nếu có thể
-        results.sort(key=lambda x: x.get("extracted_at", ""))
+        # Sắp xếp kết quả theo thời gian xử lý (mới nhất trước)
+        results.sort(key=lambda x: x.get("processed_at", ""), reverse=True)
 
         return results
     except Exception as e:
