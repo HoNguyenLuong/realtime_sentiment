@@ -264,85 +264,101 @@ def extract_livestream_audio(url, stream_id):
 
 def extract_youtube_comments(url, video_id):
     """
-    Trích xuất comment từ một video YouTube với đầy đủ thông tin
-
-    Args:
-        url (str): URL của video YouTube
-        video_id (str): ID của video YouTube
-
-    Returns:
-        dict: Dictionary chứa thông tin video và danh sách comments
+    Extract comments from a YouTube video, save to MinIO, and send metadata to Kafka
     """
     try:
-        logger.info(f"Extracting comments for YouTube video: {video_id}")
+        import json, subprocess, threading, os
+        thread_name = threading.current_thread().name
+        logger.info(f"[{thread_name}] Extracting comments for YouTube video: {video_id}")
 
-        # Lấy cấu hình từ CONFIG
+        # Get configuration from CONFIG
         max_comments = CONFIG['comments']['max_comments']
         sort_order = CONFIG['comments']['sort']
 
-        # Sử dụng yt-dlp để lấy comments
+        # First save info.json file using yt-dlp
+        # Using similar approach to the test.py file
+        info_filename = f"{video_id}.info.json"
+
         cmd = [
             'yt-dlp',
+            '--write-info-json',
             '--write-comments',
             '--no-download',
+            '--skip-download',
+            '--output', video_id,  # Set output filename to video_id
             '--extractor-args', f'youtube:comment_sort={sort_order};max_comments={max_comments}',
-            '-O', 'comments',
-            '--dump-json',
             url
         ]
 
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            logger.error(f"[{thread_name}] yt-dlp command failed: {result.stderr.strip()}")
+            return
 
-        # Trích xuất toàn bộ thông tin comment
+        # Read info.json file
+        if not os.path.exists(info_filename):
+            logger.error(f"[{thread_name}] Cannot find downloaded info JSON file: {info_filename}")
+            return
+
+        with open(info_filename, 'r', encoding='utf-8') as f:
+            video_info = json.load(f)
+
+        raw_comments = video_info.get('comments', [])
+
         comments = []
-        for line in result.stdout.strip().split('\n'):
-            if line:  # Đảm bảo line không trống
-                try:
-                    comment = json.loads(line)
-                    comment_obj = {
-                        "id": comment.get("id", f"unknown"),
-                        "text": comment.get("text", ""),
-                        "author": comment.get("author", "unknown"),
-                        "timestamp": comment.get("timestamp", None),
-                        "parent_id": comment.get("parent", "root"),
-                        "likes": comment.get("like_count", 0)
-                    }
-                    comments.append(comment_obj)
+        for comment in raw_comments:
+            comment_obj = {
+                "id": comment.get("id", "unknown"),
+                "text": comment.get("text", ""),
+                "author": comment.get("author", "unknown"),
+                "timestamp": int(comment.get("timestamp", 0)) if comment.get("timestamp") else 0,
+                "parent_id": comment.get("parent", "root"),
+                "likes": int(comment.get("like_count", 0))
+            }
+            comments.append(comment_obj)
 
-                    # Xử lý các comment con (replies) nếu có
-                    if 'replies' in comment and comment['replies']:
-                        for reply in comment['replies']:
-                            reply_obj = {
-                                "id": reply.get("id", f"unknown"),
-                                "text": reply.get("text", ""),
-                                "author": reply.get("author", "unknown"),
-                                "timestamp": reply.get("timestamp", None),
-                                "parent_id": comment.get("id", "unknown"),  # Parent là ID của comment chính
-                                "likes": reply.get("like_count", 0)
-                            }
-                            comments.append(reply_obj)
-                except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse comment JSON: {line[:100]}...")
+            # Process replies if they exist
+            if "replies" in comment:
+                for reply in comment.get("replies", []):
+                    reply_obj = {
+                        "id": reply.get("id", "unknown"),
+                        "text": reply.get("text", ""),
+                        "author": reply.get("author", "unknown"),
+                        "timestamp": int(reply.get("timestamp", 0)) if reply.get("timestamp") else 0,
+                        "parent_id": comment.get("id", "unknown"),
+                        "likes": int(reply.get("like_count", 0))
+                    }
+                    comments.append(reply_obj)
+
+        # Clean up temporary files
+        for file in os.listdir():
+            if file.startswith(video_id) and not file.endswith('.json'):
+                try:
+                    os.remove(file)
+                except Exception as e:
+                    logger.warning(f"Could not remove file {file}: {e}")
 
         if not comments:
-            logger.warning(f"No comments extracted for video {video_id}")
-            return {"video_id": video_id, "comments": []}
+            logger.warning(f"[{thread_name}] No comments extracted for video {video_id}")
+            return
 
-        logger.info(f"Extracted {len(comments)} comments for video {video_id}")
+        logger.info(f"[{thread_name}] Extracted {len(comments)} comments for video {video_id}")
 
-        # Trả về dictionary chứa thông tin video và comments
-        return {
-            "video_id": video_id,
-            "comments": comments
-        }
+        # Send to MinIO and Kafka
+        logger.info(f"[{thread_name}] Sending {len(comments)} comments to MinIO and Kafka for video {video_id}")
+        send_comments(video_id, comments)
+        logger.info(f"[{thread_name}] Successfully sent comments to MinIO and Kafka for video {video_id}")
 
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with return code {e.returncode}: {e.stderr}")
-        return {"video_id": video_id, "comments": []}
+        # Clean up info.json file
+        if os.path.exists(info_filename):
+            try:
+                os.remove(info_filename)
+            except Exception as e:
+                logger.warning(f"Could not remove info file {info_filename}: {e}")
+
     except Exception as e:
-        logger.error(f"Error extracting YouTube comments: {e}")
+        logger.error(f"[{thread_name}] Unexpected error in extract_youtube_comments: {str(e)}")
         logger.exception(e)
-        return {"video_id": video_id, "comments": []}
 
 def extract_livestream_comments(url, video_id):
     """

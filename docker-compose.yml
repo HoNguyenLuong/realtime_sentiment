@@ -80,6 +80,8 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./:/app
+    env_file:
+      - .env
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_SERVERS=kafka:9092

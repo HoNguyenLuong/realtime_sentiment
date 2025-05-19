@@ -1,3 +1,4 @@
+import os
 from collections import Counter
 from datetime import datetime
 import json, io
@@ -145,16 +146,24 @@ def generate_final_sentiment_result():
     num_chunks = sum(item.get("num_chunks", 0) for item in audio_res.values())
 
     # Chuyển dict sang JSON string
+    cmt_res_str = json.dumps(cmt_res, ensure_ascii=False, indent=2)
     audio_res_str = json.dumps(audio_res, ensure_ascii=False, indent=2)
     frame_res_str = json.dumps(frame_res, ensure_ascii=False, indent=2)
 
-    final_result = use_llm_for_sentiment(audio_res_str, frame_res_str, num_frames, num_chunks)
+    final_result = use_llm_for_sentiment(cmt_res_str, audio_res_str, frame_res_str,num_cmt, num_chunks, num_frames)
 
     return final_result
 
 
-def process_and_save_fusion_results_to_minio(client, bucket_name, object_name):
+def process_and_save_fusion_results_to_minio(client, bucket_name, object_name, video_id=None):
     fusion_results = generate_final_sentiment_result()
+
+    # If video_id is provided, save with that ID in the filename
+    if video_id:
+        # Extract file extension
+        base, ext = os.path.splitext(object_name)
+        # Create new object name with video_id
+        object_name = f"{base}_{video_id}{ext}"
 
     json_data = json.dumps(fusion_results, indent=2).encode("utf-8")
     data_stream = io.BytesIO(json_data)
@@ -166,6 +175,8 @@ def process_and_save_fusion_results_to_minio(client, bucket_name, object_name):
         length=len(json_data),
         content_type="application/json"
     )
+
+    return object_name  # Return the object name that was used
 
 def load_sentiment_result_from_minio(client, bucket_name: str, object_name: str) -> dict:
     """

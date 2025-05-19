@@ -69,10 +69,12 @@ from src.api.routes import router as api_router
 from src.producer.controller import process_url
 from src.producer.config import minio_client, MINIO_BUCKET, FUSION_OBJECT_NAME
 from src.consumer.spark_video import run as run_video_consumer
-from src.utils.fusion_utils import get_fusion_component_results, get_fusion_sentiment_results
+from src.utils.comment_utils import get_sentiment_results as get_comment_sentiment_results
 from src.utils.image_utils import get_sentiment_results as get_video_sentiment_results  # Đổi tên để tránh nhầm lẫn
 from src.utils.audio_utils import get_audio_sentiment_results
+from src.utils.fusion_utils import get_fusion_sentiment_results, get_fusion_component_results
 from src.consumer.spark_audio import run as run_audio_consumer
+from src.consumer.spark_comment import run as run_comment_consumer
 from src.consumer.fusion_consumer import run as run_fusion_consumer
 
 # Cache kết quả sentiment - với các key rõ ràng để tránh nhầm lẫn
@@ -80,6 +82,7 @@ sentiment_results = {
     "comment_sentiment": {"positive": 0, "negative": 0, "neutral": 0},
     "video_sentiment": [],
     "audio_sentiment": [],
+    "comment_details": [],
     "fusion_sentiment": {}
 }
 # Phần lifespan handler để khởi động background tasks
@@ -94,6 +97,10 @@ async def lifespan(app: FastAPI):
     audio_consumer_thread = threading.Thread(target=run_audio_consumer, daemon=True)
     audio_consumer_thread.start()
     print("✅ Audio consumer started in background")
+
+    comment_consumer_thread = threading.Thread(target=run_comment_consumer, daemon=True)
+    comment_consumer_thread.start()
+    print("✅ Comment consumer started in background")
 
     fusion_consumer_thread = threading.Thread(target=run_fusion_consumer, daemon=True)
     fusion_consumer_thread.start()
@@ -310,23 +317,126 @@ async def status():
         "audio_chunks_analyzed": len(sentiment_results["audio_sentiment"]),  # Thêm số lượng audio chunks
     }
 
+@app.get("/api/get_comment_sentiments")
+async def get_comment_sentiments(video_id: str = None):
+    """API endpoint để lấy kết quả phân tích cảm xúc từ comments"""
+    try:
+        # Lấy kết quả sentiment từ comments sử dụng hàm từ utils
+        results = get_comment_sentiment_results("comment_sentiment_results")
+
+        # Lọc kết quả theo video_id nếu được cung cấp
+        if video_id:
+            results = [r for r in results if r.get("content_id") == video_id]
+
+        # Cập nhật cache cho kết quả comment sentiment
+        comment_sentiment_summary = {"positive": 0, "negative": 0, "neutral": 0}
+        languages_detected = {}
+
+        for result in results:
+            sentiment = result.get("sentiment", "neutral")
+            if sentiment in comment_sentiment_summary:
+                comment_sentiment_summary[sentiment] += 1
+
+            # Ghi nhận ngôn ngữ
+            language = result.get("language", "unknown")
+            if language in languages_detected:
+                languages_detected[language] += 1
+            else:
+                languages_detected[language] = 1
+
+        # Cập nhật cache với kết quả tổng hợp
+        sentiment_results["comment_sentiment"] = {
+            **comment_sentiment_summary,
+            "total": len(results),
+            "languages": languages_detected
+        }
+
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/comment_sentiment", response_class=HTMLResponse)
+async def comment_sentiment_page(request: Request, video_id: str = None):
+    """Trang hiển thị phân tích cảm xúc từ comments"""
+    try:
+        # Lấy kết quả sentiment từ comments
+        results = get_comment_sentiment_results("comment_sentiment_results")
+
+        # Lọc theo video_id nếu có
+        if video_id:
+            filtered_results = [r for r in results if r.get("content_id") == video_id]
+        else:
+            filtered_results = results
+
+        # Tạo tổng hợp theo sentiment
+        summary = {"positive": 0, "negative": 0, "neutral": 0}
+        languages = {}
+
+        for result in filtered_results:
+            sentiment = result.get("sentiment", "neutral")
+            if sentiment in summary:
+                summary[sentiment] += 1
+
+            # Ghi nhận ngôn ngữ
+            language = result.get("language", "unknown")
+            if language in languages:
+                languages[language] += 1
+            else:
+                languages[language] = 1
+
+        # Cập nhật cache
+        sentiment_results["comment_sentiment"] = {
+            **summary,
+            "total": len(filtered_results),
+            "languages": languages
+        }
+
+        return templates.TemplateResponse("comment_sentiment.html", {
+            "request": request,
+            "results": filtered_results,
+            "summary": summary,
+            "languages": languages,
+            "video_id": video_id,
+            "total_comments": len(filtered_results),
+            "messages": []
+        })
+    except Exception as e:
+        messages = [{"category": "danger", "message": f"Lỗi khi tải dữ liệu comments: {str(e)}"}]
+        return templates.TemplateResponse("comment_sentiment.html", {
+            "request": request,
+            "results": [],
+            "summary": {"positive": 0, "negative": 0, "neutral": 0},
+            "languages": {},
+            "video_id": video_id,
+            "total_comments": 0,
+            "messages": messages
+        })
+
 @app.get("/fusion_sentiment", response_class=HTMLResponse)
 async def fusion_sentiment_page(request: Request):
     """Trang hiển thị kết quả phân tích cảm xúc tổng hợp (fusion)"""
     try:
+        # Get video_id from query parameters if available
+        video_id = request.query_params.get('video_id')
+
+        # Create a cache key based on video_id if available
+        cache_key = f"fusion_sentiment_{video_id}" if video_id else "fusion_sentiment"
+
         # Kiểm tra xem đã có kết quả fusion trong cache chưa
-        if not sentiment_results["fusion_sentiment"]:
+        if cache_key not in sentiment_results:
             # Nếu chưa, thử lấy từ fusion utils
-            result = get_fusion_sentiment_results()
+            result = get_fusion_sentiment_results(video_id=video_id)
             if result:
-                sentiment_results["fusion_sentiment"] = result
+                sentiment_results[cache_key] = result
             else:
                 # Nếu không có kết quả, hiển thị thông báo đang xử lý
+                video_msg = f" cho video ID: {video_id}" if video_id else ""
                 messages = [{"category": "info",
-                            "message": "Đang xử lý phân tích cảm xúc tổng hợp. Trang sẽ tự động cập nhật khi có kết quả."}]
+                             "message": f"Đang xử lý phân tích cảm xúc tổng hợp{video_msg}. Trang sẽ tự động cập nhật khi có kết quả."}]
                 return templates.TemplateResponse("fusion_sentiment.html", {
                     "request": request,
                     "result": {},
+                    "video_id": video_id,  # Pass video_id to template
                     "auto_refresh": True,  # Thêm flag để template biết cần auto-refresh
                     "messages": messages
                 })
@@ -334,22 +444,28 @@ async def fusion_sentiment_page(request: Request):
         # Lấy thêm kết quả thành phần nếu có template hiển thị chi tiết
         component_results = None
         try:
-            component_results = get_fusion_component_results()
+            # If your get_fusion_component_results doesn't yet support video_id,
+            # you might need to modify that function too
+            component_results = get_fusion_component_results(video_id=video_id)
         except Exception:
             pass  # Bỏ qua lỗi khi không lấy được kết quả thành phần
 
         return templates.TemplateResponse("fusion_sentiment.html", {
             "request": request,
-            "result": sentiment_results["fusion_sentiment"],
+            "result": sentiment_results[cache_key],
             "components": component_results,
+            "video_id": video_id,  # Pass video_id to template
             "auto_refresh": False,  # Không cần auto-refresh nữa vì đã có kết quả
             "messages": []
         })
     except Exception as e:
-        messages = [{"category": "danger", "message": f"Lỗi khi tải dữ liệu fusion: {str(e)}"}]
+        video_id = request.query_params.get('video_id')
+        video_msg = f" cho video ID: {video_id}" if video_id else ""
+        messages = [{"category": "danger", "message": f"Lỗi khi tải dữ liệu fusion{video_msg}: {str(e)}"}]
         return templates.TemplateResponse("fusion_sentiment.html", {
             "request": request,
             "result": {},
+            "video_id": video_id,  # Pass video_id to template
             "auto_refresh": True,  # Vẫn cần auto-refresh để thử lại
             "messages": messages
         })
