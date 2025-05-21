@@ -88,7 +88,7 @@ def send_comments(video_id, comments_data):
     """
     timestamp = datetime.utcnow().isoformat()
     bucket_name = CONFIG['comments']['comments_bucket']
-    object_prefix = f"{video_id}/comments/"
+    object_prefix = f"{video_id}/"  # Đã loại bỏ cấp "comments/" để lưu trực tiếp dưới video_id
 
     # Create detailed log of what we're about to process
     logger.info(f"[send_comments] Processing {len(comments_data)} comments for video {video_id}")

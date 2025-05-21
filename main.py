@@ -98,9 +98,9 @@ async def lifespan(app: FastAPI):
     audio_consumer_thread.start()
     print("✅ Audio consumer started in background")
 
-    comment_consumer_thread = threading.Thread(target=run_comment_consumer, daemon=True)
-    comment_consumer_thread.start()
-    print("✅ Comment consumer started in background")
+    # comment_consumer_thread = threading.Thread(target=run_comment_consumer, daemon=True)
+    # comment_consumer_thread.start()
+    # print("✅ Comment consumer started in background")
 
     fusion_consumer_thread = threading.Thread(target=run_fusion_consumer, daemon=True)
     fusion_consumer_thread.start()
