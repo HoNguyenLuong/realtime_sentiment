@@ -6,7 +6,7 @@ load_dotenv()
 
 CONFIG = {
     'kafka': {
-        'bootstrap_servers': os.getenv('KAFKA_SERVERS', 'localhost:9092'),
+        'bootstrap_servers': os.getenv('KAFKA_SERVERS', 'kafka1:9092,kafka2:9092,kafka3:9092').split(','),
     },
     'video': {
         'width': int(os.getenv('VIDEO_WIDTH', 640)),
@@ -30,10 +30,10 @@ CONFIG = {
 
 # MinIO client
 minio_client = Minio(
-    os.getenv("MINIO_ENDPOINT", "localhost:9000"),
+    endpoint=os.getenv("MINIO_ENDPOINT", "minio1:9000"),
     access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
     secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-    secure=False
+    secure=False  # Chạy trong Docker network nội bộ, không cần HTTPS
 )
 
 MINIO_BUCKET = "sentiment-results"
