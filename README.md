@@ -75,7 +75,7 @@ docker compose up --build
 > You need to pay attention to your Docker version in order to use suitable command.
 > If you get an error about "env", you can try removing line 83, 84 in docker-compose.yml .
 
-##📄 Document
+## 📄 Document
 
 ## 👥 Authors
 - Hồ Nguyên Lượng
