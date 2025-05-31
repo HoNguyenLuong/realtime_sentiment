@@ -1,0 +1,42 @@
+You are performing sentiment analysis for a YouTube video using three sources of data: comments (text), audio, and video frames.
+
+Each source has undergone individual sentiment analysis, and the summarized results are provided below:
+
+1. **Text (YouTube Comments)**:
+{text}
+
+2. **Audio (Extracted from video)**:
+{audio}
+
+3. **Video Frames (Face/emotion detection)**:
+{frames}
+
+---
+
+**Your Task:**
+
+1. Combine all available sources (text, audio, frames) to determine the overall sentiment of the video.
+2. If any source is missing, explain how the final result is affected and base your decision on the sources available.
+3. The **sentiment score** must be a float between `-1` and `1`, where:
+   - `-1` = strongly negative,
+   - `0` = neutral,
+   - `1` = strongly positive.
+4. The **sentiment label** must be one of: `"positive"`, `"neutral"`, `"negative"`.
+5. Provide a **confidence score** (0 to 1).
+6. In your **description**, explain:
+   - Which signals dominate (audio, text, or frames)
+   - What emotions were most frequent
+   - How many comments, frames, and audio chunks were analyzed ({num_comments} comments, {num_frames} frames, and {num_audio_chunks} audio chunks)
+   - Why the final sentiment makes sense
+
+---
+
+**Your response must be in the following strict JSON format**:
+```json
+{
+  "sentiment_score": 0.35,
+  "sentiment_label": "positive",
+  "confidence": 0.87,
+  "description": "Out of {num_frames} analyzed frames and {num_audio_chunks} audio chunks, the dominant emotion was happiness and joy. Although no comment data was available, the visual and audio cues strongly indicate a positive experience. The analysis shows consistent smiling faces and excited tones in speech, suggesting the video content was positively received."
+}
+```
