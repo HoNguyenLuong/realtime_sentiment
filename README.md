@@ -1,4 +1,7 @@
 # Real-time Sentiment Analysis of Social Media Data
+![Screenshot from 2025-05-31 20-56-58](https://github.com/user-attachments/assets/7c07a95c-9be5-4eee-a605-75b100fa9c82)
+![Screenshot from 2025-05-31 20-58-13](https://github.com/user-attachments/assets/91b65b80-9244-45ea-9be4-6f76daa2bf0b)
+![image](https://github.com/user-attachments/assets/50f0cdbc-7b3e-4d02-b5b1-977336d2e27c)
 
 ## 📌 Introduction
 This project builds a real-time, multimodal sentiment analysis system that processes data from social media platforms such as YouTube (TikTok). Unlike traditional sentiment analysis methods that focus solely on text, this system integrates visual, audio, and textual data to provide comprehensive sentiment evaluation. The results are stored and visualized on a real-time dashboard for immediate insight into public sentiment trends.
